@@ -13,6 +13,7 @@
   import { activeTheme } from "../theme/store.js";
   import { fontConfig } from "../theme/fontStore.js";
   import { getOutputSink } from "./outputSink.js";
+  import { openExternalLink } from "./links.js";
   import { attachWebgl } from "./webglRenderer.js";
   import { terminalConfig } from "../stores/terminalConfigStore.js";
   import { terminalPadding } from "../theme/paddingStore.js";
@@ -80,7 +81,7 @@
       const fitAddon = new FitAddon();
       fa = fitAddon;
       t.loadAddon(fitAddon);
-      t.loadAddon(new WebLinksAddon());
+      t.loadAddon(new WebLinksAddon(openExternalLink));
       const search = new SearchAddon();
       t.loadAddon(search);
       searchAddon = search;

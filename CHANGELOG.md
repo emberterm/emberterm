@@ -4,6 +4,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Fixed
+
+- **Terminal links open in the system browser:** Ctrl-clicking a URL in the output now goes through the opener plugin instead of the webview's own `window.open`. Only parseable `http(s)` links are handled, and a failed open raises a toast instead of failing silently. (#39)
+
 ## [1.0.0] - 2026-10-28
 
 First stable release.
