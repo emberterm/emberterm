@@ -6,6 +6,7 @@
     y: number;
     atStart: boolean;
     atEnd: boolean;
+    onDuplicate: () => void;
     onMoveLeft: () => void;
     onMoveRight: () => void;
     onMoveStart: () => void;
@@ -13,13 +14,13 @@
     onClose: () => void;
   }
 
-  let { x, y, atStart, atEnd, onMoveLeft, onMoveRight, onMoveStart, onMoveEnd, onClose }: Props = $props();
+  let { x, y, atStart, atEnd, onDuplicate, onMoveLeft, onMoveRight, onMoveStart, onMoveEnd, onClose }: Props = $props();
 
   let menu: HTMLDivElement | undefined = $state();
 
   // Keep the menu on screen when opened near the right/bottom edge.
   const left = $derived(Math.max(4, Math.min(x, window.innerWidth - 164)));
-  const top = $derived(Math.max(4, Math.min(y, window.innerHeight - 140)));
+  const top = $derived(Math.max(4, Math.min(y, window.innerHeight - 180)));
 
   onMount(() => menu?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus());
 
@@ -44,6 +45,8 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div bind:this={menu} class="menu" role="menu" tabindex="-1" style="left:{left}px;top:{top}px" onkeydown={onKeydown}>
+  <button role="menuitem" onclick={() => pick(onDuplicate)}>Duplicate</button>
+  <hr />
   <button role="menuitem" disabled={atStart} onclick={() => pick(onMoveLeft)}>Move left</button>
   <button role="menuitem" disabled={atEnd} onclick={() => pick(onMoveRight)}>Move right</button>
   <hr />

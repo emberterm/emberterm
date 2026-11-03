@@ -24,7 +24,8 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { createAutosave } from "./session/autosave.js";
   import { pickProfile } from "./session/profiles.js";
-  import { toSnapshot, clampActiveTab, type SavedSession } from "./stores/sessionSnapshot.js";
+  import { duplicateIndex } from "./session/duplicateTab.js";
+  import { toSnapshot, clampActiveTab, type SavedSession, type SavedTab } from "./stores/sessionSnapshot.js";
   import { onProfilesUpdated, onConfigUpdated, onAppWarning } from "./ipc/events.js";
   import {
     tabs, activeCwd, activeShell,
@@ -180,17 +181,32 @@
     } catch (e) { pushToast(`Failed to split pane: ${e}`); }
   }
 
+  /** Fresh shells for one saved tab: its panes' profile and folder, split and custom title. */
+  async function openSavedTab(t: SavedTab): Promise<string | null> {
+    const id = await openNewTab(t.pane.profile_id, t.pane.cwd);
+    if (!id) return null;
+    if (t.custom_title && t.title) restoreCustomTitle(id, t.title);
+    if (t.split) {
+      const dir = t.split.direction === "vertical" ? "vertical" : "horizontal";
+      await splitTab(id, dir, t.split.pane.profile_id, t.split.pane.cwd);
+    }
+    return id;
+  }
+
+  async function duplicateTab(tabId: string) {
+    const src = $tabs.find((t) => t.id === tabId);
+    if (!src) return;
+    const id = await openSavedTab(toSnapshot([src]).tabs[0]);
+    if (!id) return;
+    const at = duplicateIndex($tabs, tabId);
+    if (at >= 0) moveTab(id, at);
+  }
+
   async function restoreSession(saved: SavedSession): Promise<boolean> {
     const ids: string[] = [];
     for (const t of saved.tabs) {
-      const id = await openNewTab(t.pane.profile_id, t.pane.cwd);
-      if (!id) continue;
-      ids.push(id);
-      if (t.custom_title && t.title) restoreCustomTitle(id, t.title);
-      if (t.split) {
-        const dir = t.split.direction === "vertical" ? "vertical" : "horizontal";
-        await splitTab(id, dir, t.split.pane.profile_id, t.split.pane.cwd);
-      }
+      const id = await openSavedTab(t);
+      if (id) ids.push(id);
     }
     if (!ids.length) return false;
     activateTab(ids[Math.min(clampActiveTab(saved), ids.length - 1)]);
@@ -247,7 +263,7 @@
   and always appear fully opaque, regardless of the user's transparency setting.
 -->
 <div class="app">
-  <TitleBar onNewTab={openNewTab} onCloseTab={askCloseTab} onOpenSettings={() => (settingsOpen = true)} profiles={profileCache} {defaultProfileId} />
+  <TitleBar onNewTab={openNewTab} onCloseTab={askCloseTab} onDuplicateTab={duplicateTab} onOpenSettings={() => (settingsOpen = true)} profiles={profileCache} {defaultProfileId} />
   <main class="terminal-area">
     {#if loading}
       <div class="splash">Starting shell…</div>
