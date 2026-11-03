@@ -9,11 +9,12 @@
   interface Props {
     onNewTab: (profileId?: string) => void;
     onCloseTab: (tabId: string, sessionId: string) => void;
+    onDuplicateTab: (tabId: string) => void;
     profiles?: Profile[];
     defaultProfileId?: string;
   }
 
-  let { onNewTab, onCloseTab, profiles = [], defaultProfileId = "" }: Props = $props();
+  let { onNewTab, onCloseTab, onDuplicateTab, profiles = [], defaultProfileId = "" }: Props = $props();
 
   // Display text per tab (last folder, or the program's / user's title).
   const labels = $derived(tabLabels($tabs));
@@ -211,6 +212,7 @@
     y={menu.y}
     atStart={menuIdx <= 0}
     atEnd={menuIdx >= $tabs.length - 1}
+    onDuplicate={() => menu && onDuplicateTab(menu.tabId)}
     onMoveLeft={() => moveMenuTab((i) => i - 1)}
     onMoveRight={() => moveMenuTab((i) => i + 1)}
     onMoveStart={() => moveMenuTab(() => 0)}

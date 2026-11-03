@@ -6,12 +6,13 @@
   interface Props {
     onNewTab: (profileId?: string) => void;
     onCloseTab: (tabId: string, sessionId: string) => void;
+    onDuplicateTab: (tabId: string) => void;
     onOpenSettings: () => void;
     profiles?: Profile[];
     defaultProfileId?: string;
   }
 
-  let { onNewTab, onCloseTab, onOpenSettings, profiles = [], defaultProfileId = "" }: Props = $props();
+  let { onNewTab, onCloseTab, onDuplicateTab, onOpenSettings, profiles = [], defaultProfileId = "" }: Props = $props();
 
   const win = getCurrentWindow();
 
@@ -60,7 +61,7 @@
 
   <!-- Tabs (new-tab button lives inside TabStrip) -->
   <div class="tab-area">
-    <TabStrip {onNewTab} {onCloseTab} {profiles} {defaultProfileId} />
+    <TabStrip {onNewTab} {onCloseTab} {onDuplicateTab} {profiles} {defaultProfileId} />
   </div>
 
   <!-- Spacer -->

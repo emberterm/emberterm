@@ -4,6 +4,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- **Duplicate tab:** the tab right-click menu has a Duplicate item that opens a new shell next to the tab with the same profile and folder, split the same way, and keeps a custom title. Scrollback and running programs are not copied. (#42)
+
 ### Fixed
 
 - **Terminal links open in the system browser:** Ctrl-clicking a URL in the output now goes through the opener plugin instead of the webview's own `window.open`. Only parseable `http(s)` links are handled, and a failed open raises a toast instead of failing silently. (#39)
