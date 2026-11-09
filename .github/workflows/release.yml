@@ -90,3 +90,23 @@ jobs:
           # Point the Windows updater at the NSIS installer instead of the MSI.
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
+
+  # The landing page reads the latest release at build time, so rebuild it once every platform
+  # has uploaded its assets (it fails the build on a missing installer). Needs the repo secret
+  # SITE_DEPLOY_HOOK_URL, a Vercel deploy hook; without it the step only warns.
+  site:
+    name: Rebuild site
+    needs: build
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Trigger deploy hook
+        env:
+          HOOK_URL: ${{ secrets.SITE_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK_URL" ]; then
+            echo "::warning::SITE_DEPLOY_HOOK_URL is not set; the site was not rebuilt."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 -X POST "$HOOK_URL" > /dev/null
