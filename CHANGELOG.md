@@ -4,6 +4,14 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-09
+
+### Highlights
+
+- **Duplicate a tab:** right-click a tab and choose Duplicate to open a new shell with the same profile, folder and split layout.
+- **Context menus stay on screen:** Find… and the last tab-menu items are no longer cut off when you right-click near the bottom or right edge.
+- **Terminal links open reliably:** Ctrl-clicking a URL opens the system browser, and a failure shows a toast.
+
 ### Added
 
 - **Duplicate tab:** the tab right-click menu has a Duplicate item that opens a new shell next to the tab with the same profile and folder, split the same way, and keeps a custom title. Scrollback and running programs are not copied. (#42)
