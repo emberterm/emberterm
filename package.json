@@ -1,7 +1,7 @@
 {
   "name": "emberterm",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "cd packages/desktop && cargo tauri dev",
