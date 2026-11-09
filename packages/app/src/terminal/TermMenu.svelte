@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import { clampMenu } from "../utils/menuPosition";
 
   interface Props {
     x: number;
@@ -16,11 +17,23 @@
 
   let menu: HTMLDivElement | undefined = $state();
 
-  // Keep the menu on screen when opened near the right/bottom edge.
-  const left = $derived(Math.max(4, Math.min(x, window.innerWidth - 164)));
-  const top = $derived(Math.max(4, Math.min(y, window.innerHeight - 140)));
+  // Real size, measured after render, so the clamp holds for any font, padding or DPI scale.
+  let size: { w: number; h: number } | undefined = $state();
+  const pos = $derived(size ? clampMenu(x, y, size.w, size.h, window.innerWidth, window.innerHeight) : { left: x, top: y });
 
-  onMount(() => menu?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus());
+  function measure() {
+    if (menu) size = { w: menu.offsetWidth, h: menu.offsetHeight };
+  }
+
+  // Re-measure when the menu is reopened elsewhere or the window is resized.
+  $effect(() => { void x; void y; measure(); });
+
+  // Hidden menus cannot take focus, so wait for the measured position to render first.
+  onMount(async () => {
+    measure();
+    await tick();
+    menu?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  });
 
   function pick(action: () => void) {
     onClose();
@@ -37,10 +50,10 @@
   }
 </script>
 
-<svelte:window onmousedown={(e) => { if (!menu?.contains(e.target as Node)) onClose(); }} onblur={onClose} />
+<svelte:window onresize={measure} onmousedown={(e) => { if (!menu?.contains(e.target as Node)) onClose(); }} onblur={onClose} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div bind:this={menu} class="menu" role="menu" tabindex="-1" style="left:{left}px;top:{top}px" onkeydown={onKeydown}>
+<div bind:this={menu} class="menu" role="menu" tabindex="-1" style="left:{pos.left}px;top:{pos.top}px;visibility:{size ? 'visible' : 'hidden'}" onkeydown={onKeydown}>
   <button role="menuitem" disabled={!canCopy} onclick={() => pick(onCopy)}>Copy</button>
   <button role="menuitem" onclick={() => pick(onPaste)}>Paste</button>
   <button role="menuitem" onclick={() => pick(onSelectAll)}>Select all</button>
