@@ -10,6 +10,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ### Fixed
 
+- **Context menus stay on screen:** the terminal and tab right-click menus are clamped using their measured size instead of a fixed guess, so Find… and the last tab items are no longer cut off near the bottom or right edge. (#44)
 - **Terminal links open in the system browser:** Ctrl-clicking a URL in the output now goes through the opener plugin instead of the webview's own `window.open`. Only parseable `http(s)` links are handled, and a failed open raises a toast instead of failing silently. (#39)
 
 ## [1.0.0] - 2026-10-28
