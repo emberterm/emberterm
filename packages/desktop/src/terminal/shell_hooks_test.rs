@@ -13,6 +13,7 @@ fn input<'a>(
         profile_args: args,
         profile_cwd: PathBuf::from("C:/Users/me"),
         restore_cwd: restore,
+        restore_history: &[],
         inherited_prompt_command: false,
         inherited_ps0: false,
         inherited_wslenv: None,
@@ -225,4 +226,72 @@ fn wsl_forwards_ps0_too() {
     let plan = prepare(&input(ShellKind::Wsl, &[], None, &yes));
     assert!(env(&plan, "PS0").unwrap().contains("133;C"));
     assert!(env(&plan, "WSLENV").unwrap().contains("PS0/u"));
+}
+
+fn hist(items: &[&str]) -> Vec<String> {
+    items.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn bash_sets_ember_hist_joined_by_newline() {
+    let yes = |_: &Path| true;
+    let h = hist(&["ls", "git status"]);
+    let mut i = input(ShellKind::Bash, &[], None, &yes);
+    i.restore_history = &h;
+    assert_eq!(env(&prepare(&i), "EMBER_HIST"), Some("ls\ngit status"));
+}
+
+#[test]
+fn empty_history_sets_no_env() {
+    let yes = |_: &Path| true;
+    for kind in [ShellKind::Bash, ShellKind::Wsl, ShellKind::Pwsh] {
+        assert!(env(&prepare(&input(kind, &[], None, &yes)), "EMBER_HIST").is_none());
+    }
+}
+
+#[test]
+fn history_lines_with_newlines_are_dropped() {
+    let yes = |_: &Path| true;
+    let h = hist(&["a\nb", "", "c\rd", "ok"]);
+    let mut i = input(ShellKind::Bash, &[], None, &yes);
+    i.restore_history = &h;
+    assert_eq!(env(&prepare(&i), "EMBER_HIST"), Some("ok"));
+}
+
+#[test]
+fn wsl_forwards_ember_hist() {
+    let yes = |_: &Path| true;
+    let h = hist(&["ls"]);
+    let mut i = input(ShellKind::Wsl, &[], None, &yes);
+    i.restore_history = &h;
+    let plan = prepare(&i);
+    assert_eq!(env(&plan, "EMBER_HIST"), Some("ls"));
+    assert!(env(&plan, "WSLENV").unwrap().contains("EMBER_HIST/u"));
+}
+
+#[test]
+fn pwsh_sets_ember_hist() {
+    let yes = |_: &Path| true;
+    let h = hist(&["ls"]);
+    let mut i = input(ShellKind::Pwsh, &[], None, &yes);
+    i.restore_history = &h;
+    assert_eq!(env(&prepare(&i), "EMBER_HIST"), Some("ls"));
+}
+
+#[test]
+fn other_shell_sets_no_ember_hist() {
+    let yes = |_: &Path| true;
+    let h = hist(&["ls"]);
+    let mut i = input(ShellKind::Other, &[], None, &yes);
+    i.restore_history = &h;
+    assert!(env(&prepare(&i), "EMBER_HIST").is_none());
+}
+
+#[test]
+fn hooks_emit_command_marks() {
+    let yes = |_: &Path| true;
+    let bash = prepare(&input(ShellKind::Bash, &[], None, &yes));
+    assert!(env(&bash, "PROMPT_COMMAND").unwrap().contains("133;E;"));
+    let pwsh = prepare(&input(ShellKind::Pwsh, &[], None, &yes));
+    assert!(decode_utf16le_base64(&pwsh.args[2]).contains("133;E;"));
 }

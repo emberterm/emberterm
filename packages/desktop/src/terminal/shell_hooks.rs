@@ -30,6 +30,8 @@ pub struct HookInput<'a> {
     pub profile_cwd: PathBuf,
     /// Last folder this pane reported via OSC 7, in the shell's own format.
     pub restore_cwd: Option<&'a str>,
+    /// Last commands of this pane, oldest first; loaded into the new shell's history.
+    pub restore_history: &'a [String],
     pub inherited_prompt_command: bool,
     pub inherited_ps0: bool,
     pub inherited_wslenv: Option<&'a str>,
@@ -45,7 +47,11 @@ pub struct SpawnPlan {
 /// Emits OSC 7 for `$PWD`; avoids `pwd -W`, whose fork is slow under MSYS. `%`, ESC and
 /// BEL are percent-encoded so a folder name cannot end the sequence early or be
 /// mis-decoded, and `$?` is preserved for anything the user appends to PROMPT_COMMAND.
-const BASH_OSC7: &str = r#"__ember_osc7() { local s=$? p=${PWD//%/%25}; p=${p//$'\e'/%1B}; p=${p//$'\a'/%07}; printf '\033]7;file://localhost%s\033\\\033]133;A\033\\' "$p"; return $s; }; __ember_osc7"#;
+///
+/// It also reports each new command as OSC 133;E (percent-encoded so `;`, ESC, BEL and newlines
+/// cannot end the sequence). The first prompt only seeds history from `EMBER_HIST` and records the
+/// current history number, so restored or inherited entries are not reported as new commands.
+const BASH_OSC7: &str = r#"__ember_osc7() { local s=$? p=${PWD//%/%25} h l; p=${p//$'\e'/%1B}; p=${p//$'\a'/%07}; printf '\033]7;file://localhost%s\033\\\033]133;A\033\\' "$p"; if [ -z "${__ember_hn+x}" ]; then if [ -n "${EMBER_HIST+x}" ]; then while IFS= read -r l; do history -s -- "$l"; done <<< "$EMBER_HIST"; unset EMBER_HIST; fi; __ember_hn=$HISTCMD; elif [[ $HISTCMD != "$__ember_hn" ]]; then __ember_hn=$HISTCMD; h=$(HISTTIMEFORMAT= history 1); h=${h#"${h%%[![:space:]]*}"}; h=${h#[0-9]*[[:space:]]}; h=${h#"${h%%[![:space:]]*}"}; h=${h//%/%25}; h=${h//$'\e'/%1B}; h=${h//$'\a'/%07}; h=${h//;/%3B}; h=${h//$'\r'/%0D}; h=${h//$'\n'/%0A}; printf '\033]133;E;%s\033\\' "$h"; fi; return $s; }; __ember_osc7"#;
 /// Printed by bash right before each command runs (bash >= 4.4): OSC 133;C, "a program started".
 /// With the prompt hook's 133;A this tells the app whether something is running in the tab,
 /// which the process tree cannot show for MSYS (its fork helper exits, orphaning the child).
@@ -63,6 +69,18 @@ function global:prompt {
   $p = $executionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
   $e = ($p -split '\\' | ForEach-Object { [uri]::EscapeDataString($_) }) -join '/'
   [Console]::Write("$([char]27)]7;file://localhost/$e$([char]27)\")
+  $h = Get-History -Count 1
+  $id = if ($h) { $h.Id } else { 0 }
+  if ($null -eq $global:__ember_hid) {
+    foreach ($l in ($env:EMBER_HIST -split "`n")) {
+      if ($l) { try { [Microsoft.PowerShell.PSConsoleReadLine]::AddToHistory($l) } catch {} }
+    }
+    Remove-Item Env:EMBER_HIST -ErrorAction SilentlyContinue
+    $global:__ember_hid = $id
+  } elseif ($id -ne $global:__ember_hid) {
+    $global:__ember_hid = $id
+    [Console]::Write("$([char]27)]133;E;$([uri]::EscapeDataString($h.CommandLine))$([char]27)\")
+  }
   $o
 }"#;
 
@@ -72,8 +90,12 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
         env: Vec::new(),
         cwd: input.profile_cwd.clone(),
     };
+    let history = history_env(input.restore_history);
     match input.kind {
         ShellKind::Bash => {
+            if let Some(h) = &history {
+                plan.env.push(("EMBER_HIST".into(), h.clone()));
+            }
             if !input.inherited_prompt_command {
                 plan.env.push(("PROMPT_COMMAND".into(), BASH_OSC7.into()));
             }
@@ -96,6 +118,10 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
             ));
             plan.env.push(("PS0".into(), BASH_PS0.into()));
             let mut forwarded = vec!["PROMPT_COMMAND/u", "PS0/u"];
+            if let Some(h) = history {
+                plan.env.push(("EMBER_HIST".into(), h));
+                forwarded.push("EMBER_HIST/u");
+            }
             if let Some(dir) = input.restore_cwd {
                 plan.env.push(("EMBER_CWD".into(), dir.into()));
                 forwarded.push("EMBER_CWD/u");
@@ -106,6 +132,9 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
             ));
         }
         ShellKind::Pwsh => {
+            if let Some(h) = history {
+                plan.env.push(("EMBER_HIST".into(), h));
+            }
             if !has_any_arg(
                 &plan.args,
                 &[
@@ -133,6 +162,17 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
         ShellKind::Other => {}
     }
     plan
+}
+
+/// `EMBER_HIST` value: one command per line. A line break inside a command would split it into
+/// two entries, so those are dropped (the app never records them).
+fn history_env(history: &[String]) -> Option<String> {
+    let lines: Vec<&str> = history
+        .iter()
+        .map(String::as_str)
+        .filter(|l| !l.is_empty() && !l.contains(['\n', '\r']))
+        .collect();
+    (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
 fn apply_restore_dir(

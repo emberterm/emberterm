@@ -15,6 +15,7 @@ use crate::terminal::session::SessionId;
 pub async fn session_create(
     profile_id: Option<String>,
     cwd: Option<String>,
+    history: Option<Vec<String>>,
     on_output: Channel,
     app: AppHandle,
     state: State<'_, AppState>,
@@ -45,6 +46,7 @@ pub async fn session_create(
         session_id.clone(),
         profile.as_ref(),
         cwd.as_deref(),
+        &history.unwrap_or_default(),
         on_output,
         app,
     )
