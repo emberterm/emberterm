@@ -1,5 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { OSC52_MAX_CHARS, parseOsc7, parseOsc52, parseOsc133 } from "./osc.js";
+import { OSC52_MAX_CHARS, parseOsc7, parseOsc52, parseOsc133, parseOsc133Command } from "./osc.js";
+
+describe("parseOsc133Command", () => {
+  it("decodes the percent-encoded command", () => {
+    expect(parseOsc133Command("E;ls%20-la")).toBe("ls -la");
+    expect(parseOsc133Command("E;echo%20%27a%3Bb%25c%27")).toBe("echo 'a;b%c'");
+    expect(parseOsc133Command("E;%E4%BD%A0")).toBe("你");
+  });
+  it("keeps raw text that is not valid encoding", () => {
+    expect(parseOsc133Command("E;%ZZ")).toBe("%ZZ");
+  });
+  it("ignores the busy marks, and the busy parser ignores E", () => {
+    for (const m of ["C", "A", "D;0", "B", ""]) expect(parseOsc133Command(m)).toBeNull();
+    expect(parseOsc133("E;x")).toBeNull();
+  });
+});
 
 describe("parseOsc7", () => {
   it("reads a Git Bash MSYS path", () => {

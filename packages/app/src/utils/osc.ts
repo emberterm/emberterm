@@ -48,3 +48,17 @@ export function parseOsc133(data: string): boolean | null {
   if (mark === "A" || mark === "D") return false;
   return null;
 }
+
+/**
+ * OSC 133;E from our prompt hooks: the command that just ran, percent-encoded so `;`, ESC and
+ * newlines cannot end the sequence. Returns null for every other mark.
+ */
+export function parseOsc133Command(data: string): string | null {
+  if (!data.startsWith("E;")) return null;
+  const raw = data.slice(2);
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
