@@ -17,7 +17,7 @@
   import { attachWebgl } from "./webglRenderer.js";
   import { terminalConfig } from "../stores/terminalConfigStore.js";
   import { terminalPadding } from "../theme/paddingStore.js";
-  import { parseOsc7, parseOsc52, parseOsc133 } from "../utils/osc.js";
+  import { parseOsc7, parseOsc52, parseOsc133, parseOsc133Command } from "../utils/osc.js";
   import { markPaneBusy, forgetPane } from "../stores/paneBusy.js";
   import { pushToast } from "../stores/app.js";
   import { isCopyChord, isPasteChord, isFindChord } from "./termKeys.js";
@@ -32,10 +32,11 @@
     onExit?: (code: number) => void;
     onResize?: (cols: number, rows: number) => void;
     onCwd?: (cwd: string) => void;
+    onCommand?: (cmd: string) => void;
     onTitle?: (title: string) => void;
   }
 
-  let { sessionId, active, onExit, onResize, onCwd, onTitle }: Props = $props();
+  let { sessionId, active, onExit, onResize, onCwd, onCommand, onTitle }: Props = $props();
 
   // ── Terminal instance ────────────────────────────────────────────────────
 
@@ -107,6 +108,8 @@
       t.parser.registerOscHandler(133, (data) => {
         const busy = parseOsc133(data);
         if (busy !== null) markPaneBusy(sid, busy);
+        const cmd = parseOsc133Command(data);
+        if (cmd !== null) onCommand?.(cmd);
         return true;
       });
       t.onTitleChange((title) => onTitle?.(title));

@@ -11,11 +11,13 @@ export async function sessionCreate(opts: {
   profileId?: string;
   /** Last folder this pane reported (OSC 7); the shell restores it if it still exists. */
   cwd?: string;
+  /** Last commands of this pane, oldest first; the shell loads them into its history. */
+  history?: string[];
   onOutput: (bytes: Uint8Array) => void;
 }): Promise<SessionId> {
   const channel = new Channel<ArrayBuffer>();
   channel.onmessage = (msg) => opts.onOutput(toBytes(msg));
-  return invoke("session_create", { profileId: opts.profileId ?? null, cwd: opts.cwd ?? null, onOutput: channel });
+  return invoke("session_create", { profileId: opts.profileId ?? null, cwd: opts.cwd ?? null, history: opts.history ?? null, onOutput: channel });
 }
 
 export async function sessionWrite(id: SessionId, data: Uint8Array): Promise<void> {

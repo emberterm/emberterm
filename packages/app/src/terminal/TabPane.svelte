@@ -11,10 +11,11 @@
     onResize?: (cols: number, rows: number) => void;
     onCloseSplit: () => void;
     onPaneCwd: (sessionId: string, cwd: string) => void;
+    onPaneCommand: (sessionId: string, cmd: string) => void;
     onPaneTitle: (sessionId: string, title: string) => void;
   }
 
-  let { tab, isActive, onExit, onSplitExit, onResize, onCloseSplit, onPaneCwd, onPaneTitle }: Props = $props();
+  let { tab, isActive, onExit, onSplitExit, onResize, onCloseSplit, onPaneCwd, onPaneCommand, onPaneTitle }: Props = $props();
 
   let splitRatio = $state(0.5);
 </script>
@@ -24,16 +25,16 @@
     <SplitContainer direction={tab.splitDirection ?? "horizontal"} bind:ratio={splitRatio} onClose={onCloseSplit}>
       {#snippet primary()}
         <Grid sessionId={tab.sessionId} active={isActive} {onExit} {onResize}
-              onCwd={(c) => onPaneCwd(tab.sessionId, c)} onTitle={(t) => onPaneTitle(tab.sessionId, t)} />
+              onCwd={(c) => onPaneCwd(tab.sessionId, c)} onCommand={(c) => onPaneCommand(tab.sessionId, c)} onTitle={(t) => onPaneTitle(tab.sessionId, t)} />
       {/snippet}
       {#snippet secondary()}
         <Grid sessionId={tab.splitSessionId!} active={isActive} onExit={onSplitExit}
-              onCwd={(c) => onPaneCwd(tab.splitSessionId!, c)} onTitle={(t) => onPaneTitle(tab.splitSessionId!, t)} />
+              onCwd={(c) => onPaneCwd(tab.splitSessionId!, c)} onCommand={(c) => onPaneCommand(tab.splitSessionId!, c)} onTitle={(t) => onPaneTitle(tab.splitSessionId!, t)} />
       {/snippet}
     </SplitContainer>
   {:else}
     <Grid sessionId={tab.sessionId} active={isActive} {onExit} {onResize}
-          onCwd={(c) => onPaneCwd(tab.sessionId, c)} onTitle={(t) => onPaneTitle(tab.sessionId, t)} />
+          onCwd={(c) => onPaneCwd(tab.sessionId, c)} onCommand={(c) => onPaneCommand(tab.sessionId, c)} onTitle={(t) => onPaneTitle(tab.sessionId, t)} />
   {/if}
 </div>
 
