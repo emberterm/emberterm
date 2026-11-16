@@ -11,6 +11,8 @@ import {
   activateTab,
   setTabTitle,
   setPaneCwd,
+  pushPaneCommand,
+  restoreTabHistory,
   restoreCustomTitle,
   renameTab,
   setTabSplit,
@@ -324,5 +326,57 @@ describe("background output indicators", () => {
     noteOutput("sa", true);
     activateTab(a);
     expect(tabOf(a).hasUnread).toBe(false);
+  });
+});
+
+describe("pane command history", () => {
+  const get0 = () => get(tabs)[0];
+
+  it("pushPaneCommand records for the pane and for the split", () => {
+    const id = addTab("s1", "bash");
+    setTabSplit(id, "s2", "vertical");
+    pushPaneCommand("s1", "ls");
+    pushPaneCommand("s2", "pwd");
+    expect(get0().history).toEqual(["ls"]);
+    expect(get0().splitHistory).toEqual(["pwd"]);
+  });
+
+  it("ignores filtered commands without notifying the store", () => {
+    addTab("s1", "bash");
+    const before = get0();
+    pushPaneCommand("s1", " hidden");
+    pushPaneCommand("s1", "export TOKEN=x");
+    expect(get0()).toBe(before);
+  });
+
+  it("drops a consecutive duplicate without notifying the store", () => {
+    addTab("s1", "bash");
+    pushPaneCommand("s1", "ls");
+    const before = get0();
+    pushPaneCommand("s1", "ls");
+    expect(get0()).toBe(before);
+  });
+
+  it("keeps the newest 10", () => {
+    addTab("s1", "bash");
+    for (let i = 0; i < 12; i++) pushPaneCommand("s1", `c${i}`);
+    expect(get0().history).toHaveLength(10);
+    expect(get0().history![0]).toBe("c2");
+  });
+
+  it("restoreTabHistory sets both panes and trims to 10", () => {
+    const id = addTab("s1", "bash");
+    const long = Array.from({ length: 15 }, (_, i) => `c${i}`);
+    restoreTabHistory(id, long, ["x"]);
+    expect(get0().history).toEqual(long.slice(-10));
+    expect(get0().splitHistory).toEqual(["x"]);
+  });
+
+  it("clearTabSplit forgets splitHistory", () => {
+    const id = addTab("s1", "bash");
+    setTabSplit(id, "s2", "horizontal");
+    pushPaneCommand("s2", "ls");
+    clearTabSplit(id);
+    expect(get0().splitHistory).toBeUndefined();
   });
 });

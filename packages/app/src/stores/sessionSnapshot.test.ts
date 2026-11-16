@@ -37,6 +37,19 @@ describe("toSnapshot", () => {
   });
 });
 
+describe("toSnapshot history", () => {
+  it("writes history for the pane and the split only when non-empty", () => {
+    const snap = toSnapshot([
+      tab({ cwd: "/d", history: ["ls", "pwd"], splitSessionId: "s2", splitHistory: ["git status"] }),
+      tab({ history: [], splitSessionId: "s3", splitHistory: [] }),
+    ]);
+    expect(snap.tabs[0].pane.history).toEqual(["ls", "pwd"]);
+    expect(snap.tabs[0].split!.pane.history).toEqual(["git status"]);
+    expect("history" in snap.tabs[1].pane).toBe(false);
+    expect("history" in snap.tabs[1].split!.pane).toBe(false);
+  });
+});
+
 describe("clampActiveTab", () => {
   const s = (active: number, n: number): SavedSession =>
     ({ version: 1, active_tab: active, tabs: Array.from({ length: n }, () => ({ custom_title: false, pane: {} })) });
