@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { clampMenu } from "../utils/menuPosition";
+  import { portal } from "../utils/portal";
 
   interface Props {
     x: number;
@@ -53,7 +54,7 @@
 <svelte:window onresize={measure} onmousedown={(e) => { if (!menu?.contains(e.target as Node)) onClose(); }} onblur={onClose} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div bind:this={menu} class="menu" role="menu" tabindex="-1" style="left:{pos.left}px;top:{pos.top}px;visibility:{size ? 'visible' : 'hidden'}" onkeydown={onKeydown}>
+<div use:portal bind:this={menu} class="menu" role="menu" tabindex="-1" style="left:{pos.left}px;top:{pos.top}px;visibility:{size ? 'visible' : 'hidden'}" onkeydown={onKeydown}>
   <button role="menuitem" disabled={!canCopy} onclick={() => pick(onCopy)}>Copy</button>
   <button role="menuitem" onclick={() => pick(onPaste)}>Paste</button>
   <button role="menuitem" onclick={() => pick(onSelectAll)}>Select all</button>
