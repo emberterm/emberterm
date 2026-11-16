@@ -331,7 +331,15 @@ fn invalid_or_missing_nonce_sets_no_env() {
     let yes = |_: &Path| true;
     let none = prepare(&input(ShellKind::Bash, &[], None, &yes));
     assert!(env(&none, "EMBER_NONCE").is_none());
-    for bad in ["", "a;b", "x y", &"a".repeat(65)] {
+    // Each value breaks one rule: empty, a `;`, a space, longer than 64.
+    let tok = test_nonce();
+    let invalid = [
+        String::new(),
+        format!("{tok};x"),
+        format!("{tok} y"),
+        tok.repeat(65),
+    ];
+    for bad in &invalid {
         let plan = prepare(&with_nonce(
             input(ShellKind::Bash, &[], None, &yes),
             bad,
