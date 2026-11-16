@@ -22,6 +22,7 @@ pub fn spawn_session(
     profile: Option<&crate::profile::Profile>,
     restore_cwd: Option<&str>,
     restore_history: &[String],
+    nonce: Option<&str>,
     on_output: Channel,
     app: AppHandle,
 ) -> Result<Session> {
@@ -53,6 +54,7 @@ pub fn spawn_session(
         profile_cwd,
         restore_cwd,
         restore_history,
+        nonce,
         inherited_prompt_command: std::env::var_os("PROMPT_COMMAND").is_some(),
         inherited_ps0: std::env::var_os("PS0").is_some(),
         inherited_wslenv: wslenv.as_deref(),

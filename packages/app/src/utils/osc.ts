@@ -50,12 +50,15 @@ export function parseOsc133(data: string): boolean | null {
 }
 
 /**
- * OSC 133;E from our prompt hooks: the command that just ran, percent-encoded so `;`, ESC and
- * newlines cannot end the sequence. Returns null for every other mark.
+ * OSC 133;E;<nonce>;<command> from our prompt hooks: the command that just ran, percent-encoded so
+ * `;`, ESC and newlines cannot end the sequence. The nonce is this session's secret (the shell gets
+ * it in its environment and keeps it out of children), so a mark a program printed itself is
+ * ignored. Returns null for every other mark.
  */
-export function parseOsc133Command(data: string): string | null {
-  if (!data.startsWith("E;")) return null;
-  const raw = data.slice(2);
+export function parseOsc133Command(data: string, nonce: string): string | null {
+  const prefix = `E;${nonce};`;
+  if (!nonce || !data.startsWith(prefix)) return null;
+  const raw = data.slice(prefix.length);
   try {
     return decodeURIComponent(raw);
   } catch {

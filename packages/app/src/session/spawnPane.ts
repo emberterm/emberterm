@@ -1,6 +1,7 @@
 import { sessionAck, sessionCreate } from "../ipc/client.js";
 import { createOutputSink, registerOutputSink } from "../terminal/outputSink.js";
 import { noteOutput } from "../stores/app.js";
+import { newNonce, setPaneNonce } from "./nonces.js";
 
 const STARTUP_GRACE_MS = 2000;
 
@@ -12,10 +13,12 @@ export async function spawnPane(profileId?: string, cwd?: string, history?: stri
     if (sid) sessionAck(sid, bytes).catch(console.error);
   });
   const born = Date.now();
+  const nonce = newNonce();
   const sessionId = await sessionCreate({
     profileId,
     cwd,
     history,
+    nonce,
     onOutput: (bytes) => {
       sink.push(bytes);
       // The shell's startup banner is not news; only later output marks the tab unread.
@@ -23,6 +26,7 @@ export async function spawnPane(profileId?: string, cwd?: string, history?: stri
     },
   });
   sid = sessionId;
+  setPaneNonce(sessionId, nonce);
   registerOutputSink(sessionId, sink);
   return sessionId;
 }

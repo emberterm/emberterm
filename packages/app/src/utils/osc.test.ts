@@ -2,17 +2,27 @@ import { describe, it, expect } from "vitest";
 import { OSC52_MAX_CHARS, parseOsc7, parseOsc52, parseOsc133, parseOsc133Command } from "./osc.js";
 
 describe("parseOsc133Command", () => {
+  const N = "abc123";
   it("decodes the percent-encoded command", () => {
-    expect(parseOsc133Command("E;ls%20-la")).toBe("ls -la");
-    expect(parseOsc133Command("E;echo%20%27a%3Bb%25c%27")).toBe("echo 'a;b%c'");
-    expect(parseOsc133Command("E;%E4%BD%A0")).toBe("你");
+    expect(parseOsc133Command(`E;${N};ls%20-la`, N)).toBe("ls -la");
+    expect(parseOsc133Command(`E;${N};echo%20%27a%3Bb%25c%27`, N)).toBe("echo 'a;b%c'");
+    expect(parseOsc133Command(`E;${N};%E4%BD%A0`, N)).toBe("你");
+  });
+  it("keeps a command that contains ; after the nonce", () => {
+    expect(parseOsc133Command(`E;${N};a;b`, N)).toBe("a;b");
   });
   it("keeps raw text that is not valid encoding", () => {
-    expect(parseOsc133Command("E;%ZZ")).toBe("%ZZ");
+    expect(parseOsc133Command(`E;${N};%ZZ`, N)).toBe("%ZZ");
+  });
+  it("ignores marks a program printed: no nonce, wrong nonce, or no expected nonce", () => {
+    expect(parseOsc133Command("E;ls", N)).toBeNull();
+    expect(parseOsc133Command("E;zzz;ls", N)).toBeNull();
+    expect(parseOsc133Command(`E;${N}x;ls`, N)).toBeNull();
+    expect(parseOsc133Command(`E;${N};ls`, "")).toBeNull();
   });
   it("ignores the busy marks, and the busy parser ignores E", () => {
-    for (const m of ["C", "A", "D;0", "B", ""]) expect(parseOsc133Command(m)).toBeNull();
-    expect(parseOsc133("E;x")).toBeNull();
+    for (const m of ["C", "A", "D;0", "B", ""]) expect(parseOsc133Command(m, N)).toBeNull();
+    expect(parseOsc133(`E;${N};x`)).toBeNull();
   });
 });
 

@@ -16,6 +16,7 @@ pub async fn session_create(
     profile_id: Option<String>,
     cwd: Option<String>,
     history: Option<Vec<String>>,
+    nonce: Option<String>,
     on_output: Channel,
     app: AppHandle,
     state: State<'_, AppState>,
@@ -47,6 +48,7 @@ pub async fn session_create(
         profile.as_ref(),
         cwd.as_deref(),
         &history.unwrap_or_default(),
+        nonce.as_deref(),
         on_output,
         app,
     )

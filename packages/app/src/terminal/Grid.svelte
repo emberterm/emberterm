@@ -19,6 +19,7 @@
   import { terminalPadding } from "../theme/paddingStore.js";
   import { parseOsc7, parseOsc52, parseOsc133, parseOsc133Command } from "../utils/osc.js";
   import { markPaneBusy, forgetPane } from "../stores/paneBusy.js";
+  import { getPaneNonce, forgetPaneNonce } from "../session/nonces.js";
   import { pushToast } from "../stores/app.js";
   import { isCopyChord, isPasteChord, isFindChord } from "./termKeys.js";
   import { shortcutFor } from "../utils/shortcuts.js";
@@ -108,7 +109,7 @@
       t.parser.registerOscHandler(133, (data) => {
         const busy = parseOsc133(data);
         if (busy !== null) markPaneBusy(sid, busy);
-        const cmd = parseOsc133Command(data);
+        const cmd = parseOsc133Command(data, getPaneNonce(sid) ?? "");
         if (cmd !== null) onCommand?.(cmd);
         return true;
       });
@@ -174,6 +175,7 @@
     return () => {
       mounted = false;
       forgetPane(sid);
+      forgetPaneNonce(sid);
       fa = undefined;
       searchAddon = undefined;
       getOutputSink(sid)?.detach();

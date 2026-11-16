@@ -32,6 +32,9 @@ pub struct HookInput<'a> {
     pub restore_cwd: Option<&'a str>,
     /// Last commands of this pane, oldest first; loaded into the new shell's history.
     pub restore_history: &'a [String],
+    /// Random per-session token the hook puts in its OSC 133;E marks, so the app can tell them
+    /// from text a program printed. Ignored unless it is 1-64 ASCII letters or digits.
+    pub nonce: Option<&'a str>,
     pub inherited_prompt_command: bool,
     pub inherited_ps0: bool,
     pub inherited_wslenv: Option<&'a str>,
@@ -50,8 +53,13 @@ pub struct SpawnPlan {
 ///
 /// It also reports each new command as OSC 133;E (percent-encoded so `;`, ESC, BEL and newlines
 /// cannot end the sequence). The first prompt only seeds history from `EMBER_HIST` and records the
-/// current history number, so restored or inherited entries are not reported as new commands.
-const BASH_OSC7: &str = r#"__ember_osc7() { local s=$? p=${PWD//%/%25} h l; p=${p//$'\e'/%1B}; p=${p//$'\a'/%07}; printf '\033]7;file://localhost%s\033\\\033]133;A\033\\' "$p"; if [ -z "${__ember_hn+x}" ]; then if [ -n "${EMBER_HIST+x}" ]; then while IFS= read -r l; do history -s -- "$l"; done <<< "$EMBER_HIST"; unset EMBER_HIST; fi; __ember_hn=$HISTCMD; elif [[ $HISTCMD != "$__ember_hn" ]]; then __ember_hn=$HISTCMD; h=$(HISTTIMEFORMAT= history 1); h=${h#"${h%%[![:space:]]*}"}; h=${h#[0-9]*[[:space:]]}; h=${h#"${h%%[![:space:]]*}"}; h=${h//%/%25}; h=${h//$'\e'/%1B}; h=${h//$'\a'/%07}; h=${h//;/%3B}; h=${h//$'\r'/%0D}; h=${h//$'\n'/%0A}; printf '\033]133;E;%s\033\\' "$h"; fi; return $s; }; __ember_osc7"#;
+/// current history number, so restored or inherited entries are not reported as new commands. The
+/// seeds are marked as already saved (`history -a /dev/null`) so they are not appended to the
+/// user's history file again. `h` is `%5d%c %s` (number, `*` or space, space, command): strip exactly
+/// that so a command's own leading space survives and the app can skip it. The per-session nonce
+/// (from `EMBER_NONCE`, kept in an unexported variable) lets the app ignore marks that a program
+/// printed itself.
+const BASH_OSC7: &str = r#"__ember_osc7() { local s=$? p=${PWD//%/%25} h l; p=${p//$'\e'/%1B}; p=${p//$'\a'/%07}; printf '\033]7;file://localhost%s\033\\\033]133;A\033\\' "$p"; if [ -z "${__ember_hn+x}" ]; then __ember_nonce=$EMBER_NONCE; unset EMBER_NONCE; if [ -n "${EMBER_HIST+x}" ]; then while IFS= read -r l; do history -s -- "$l"; done <<< "$EMBER_HIST"; history -a /dev/null; unset EMBER_HIST; fi; __ember_hn=$HISTCMD; elif [[ -n $__ember_nonce && $HISTCMD != "$__ember_hn" ]]; then __ember_hn=$HISTCMD; h=$(HISTTIMEFORMAT= history 1); h=${h#"${h%%[![:space:]]*}"}; h=${h#"${h%%[!0-9]*}"}; h=${h:2}; h=${h//%/%25}; h=${h//$'\e'/%1B}; h=${h//$'\a'/%07}; h=${h//;/%3B}; h=${h//$'\r'/%0D}; h=${h//$'\n'/%0A}; printf '\033]133;E;%s;%s\033\\' "$__ember_nonce" "$h"; fi; return $s; }; __ember_osc7"#;
 /// Printed by bash right before each command runs (bash >= 4.4): OSC 133;C, "a program started".
 /// With the prompt hook's 133;A this tells the app whether something is running in the tab,
 /// which the process tree cannot show for MSYS (its fork helper exits, orphaning the child).
@@ -72,14 +80,21 @@ function global:prompt {
   $h = Get-History -Count 1
   $id = if ($h) { $h.Id } else { 0 }
   if ($null -eq $global:__ember_hid) {
+    $global:__ember_nonce = $env:EMBER_NONCE
+    Remove-Item Env:EMBER_NONCE -ErrorAction SilentlyContinue
+    $ss = $null
+    try { $ss = (Get-PSReadLineOption).HistorySaveStyle; Set-PSReadLineOption -HistorySaveStyle SaveNothing } catch {}
     foreach ($l in ($env:EMBER_HIST -split "`n")) {
       if ($l) { try { [Microsoft.PowerShell.PSConsoleReadLine]::AddToHistory($l) } catch {} }
     }
+    if ($ss) { try { Set-PSReadLineOption -HistorySaveStyle $ss } catch {} }
     Remove-Item Env:EMBER_HIST -ErrorAction SilentlyContinue
     $global:__ember_hid = $id
   } elseif ($id -ne $global:__ember_hid) {
     $global:__ember_hid = $id
-    [Console]::Write("$([char]27)]133;E;$([uri]::EscapeDataString($h.CommandLine))$([char]27)\")
+    if ($global:__ember_nonce) {
+      [Console]::Write("$([char]27)]133;E;$global:__ember_nonce;$([uri]::EscapeDataString($h.CommandLine))$([char]27)\")
+    }
   }
   $o
 }"#;
@@ -90,14 +105,14 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
         env: Vec::new(),
         cwd: input.profile_cwd.clone(),
     };
-    let history = history_env(input.restore_history);
+    // Only where our hook is installed: it is what unsets these, so anywhere else they would stay
+    // exported to every child process of the shell.
+    let hook_env = hook_env(input);
     match input.kind {
         ShellKind::Bash => {
-            if let Some(h) = &history {
-                plan.env.push(("EMBER_HIST".into(), h.clone()));
-            }
             if !input.inherited_prompt_command {
                 plan.env.push(("PROMPT_COMMAND".into(), BASH_OSC7.into()));
+                plan.env.extend(hook_env.clone());
             }
             if !input.inherited_ps0 {
                 plan.env.push(("PS0".into(), BASH_PS0.into()));
@@ -118,10 +133,14 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
             ));
             plan.env.push(("PS0".into(), BASH_PS0.into()));
             let mut forwarded = vec!["PROMPT_COMMAND/u", "PS0/u"];
-            if let Some(h) = history {
-                plan.env.push(("EMBER_HIST".into(), h));
-                forwarded.push("EMBER_HIST/u");
+            for (k, _) in &hook_env {
+                forwarded.push(if k == "EMBER_HIST" {
+                    "EMBER_HIST/u"
+                } else {
+                    "EMBER_NONCE/u"
+                });
             }
+            plan.env.extend(hook_env);
             if let Some(dir) = input.restore_cwd {
                 plan.env.push(("EMBER_CWD".into(), dir.into()));
                 forwarded.push("EMBER_CWD/u");
@@ -132,9 +151,6 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
             ));
         }
         ShellKind::Pwsh => {
-            if let Some(h) = history {
-                plan.env.push(("EMBER_HIST".into(), h));
-            }
             if !has_any_arg(
                 &plan.args,
                 &[
@@ -152,6 +168,7 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
                 }
                 plan.args.push("-EncodedCommand".into());
                 plan.args.push(encode_pwsh(PWSH_HOOK));
+                plan.env.extend(hook_env);
             }
             apply_restore_dir(
                 &mut plan,
@@ -164,15 +181,36 @@ pub fn prepare(input: &HookInput) -> SpawnPlan {
     plan
 }
 
-/// `EMBER_HIST` value: one command per line. A line break inside a command would split it into
-/// two entries, so those are dropped (the app never records them).
+/// `EMBER_NONCE` and `EMBER_HIST` for a shell whose hook will read and unset them.
+fn hook_env(input: &HookInput) -> Vec<(String, String)> {
+    let mut env = Vec::new();
+    if let Some(n) = input
+        .nonce
+        .filter(|n| (1..=64).contains(&n.len()) && n.bytes().all(|b| b.is_ascii_alphanumeric()))
+    {
+        env.push(("EMBER_NONCE".to_string(), n.to_string()));
+    }
+    if let Some(h) = history_env(input.restore_history) {
+        env.push(("EMBER_HIST".to_string(), h));
+    }
+    env
+}
+
+/// Longest saved command replayed into a shell; the app never records longer ones.
+const MAX_HISTORY_LINE: usize = 1000;
+const MAX_HISTORY_LINES: usize = 10;
+
+/// `EMBER_HIST` value: the newest commands, one per line. A line break inside a command would
+/// split it into two entries, so those are dropped (the app never records them), and so are
+/// oversize lines: a hand-edited `session.json` must not be able to overflow the environment block.
 fn history_env(history: &[String]) -> Option<String> {
     let lines: Vec<&str> = history
         .iter()
         .map(String::as_str)
-        .filter(|l| !l.is_empty() && !l.contains(['\n', '\r']))
+        .filter(|l| !l.is_empty() && l.len() <= MAX_HISTORY_LINE && !l.contains(['\n', '\r']))
         .collect();
-    (!lines.is_empty()).then(|| lines.join("\n"))
+    let newest = &lines[lines.len().saturating_sub(MAX_HISTORY_LINES)..];
+    (!newest.is_empty()).then(|| newest.join("\n"))
 }
 
 fn apply_restore_dir(

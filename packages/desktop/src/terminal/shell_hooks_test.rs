@@ -14,6 +14,7 @@ fn input<'a>(
         profile_cwd: PathBuf::from("C:/Users/me"),
         restore_cwd: restore,
         restore_history: &[],
+        nonce: None,
         inherited_prompt_command: false,
         inherited_ps0: false,
         inherited_wslenv: None,
@@ -294,4 +295,144 @@ fn hooks_emit_command_marks() {
     assert!(env(&bash, "PROMPT_COMMAND").unwrap().contains("133;E;"));
     let pwsh = prepare(&input(ShellKind::Pwsh, &[], None, &yes));
     assert!(decode_utf16le_base64(&pwsh.args[2]).contains("133;E;"));
+}
+
+fn with_nonce<'a>(mut i: HookInput<'a>, nonce: &'a str, hist: &'a [String]) -> HookInput<'a> {
+    i.nonce = Some(nonce);
+    i.restore_history = hist;
+    i
+}
+
+#[test]
+fn nonce_and_history_are_set_where_the_hook_is_installed() {
+    let yes = |_: &Path| true;
+    let h = hist(&["ls"]);
+    for kind in [ShellKind::Bash, ShellKind::Wsl, ShellKind::Pwsh] {
+        let plan = prepare(&with_nonce(input(kind, &[], None, &yes), "abc123", &h));
+        assert_eq!(env(&plan, "EMBER_NONCE"), Some("abc123"), "{kind:?}");
+        assert_eq!(env(&plan, "EMBER_HIST"), Some("ls"), "{kind:?}");
+    }
+    let wsl = prepare(&with_nonce(
+        input(ShellKind::Wsl, &[], None, &yes),
+        "abc123",
+        &h,
+    ));
+    assert!(env(&wsl, "WSLENV").unwrap().contains("EMBER_NONCE/u"));
+}
+
+#[test]
+fn invalid_or_missing_nonce_sets_no_env() {
+    let yes = |_: &Path| true;
+    let none = prepare(&input(ShellKind::Bash, &[], None, &yes));
+    assert!(env(&none, "EMBER_NONCE").is_none());
+    for bad in ["", "a;b", "x y", &"a".repeat(65)] {
+        let plan = prepare(&with_nonce(
+            input(ShellKind::Bash, &[], None, &yes),
+            bad,
+            &[],
+        ));
+        assert!(env(&plan, "EMBER_NONCE").is_none(), "{bad:?}");
+    }
+}
+
+#[test]
+fn bash_with_inherited_prompt_command_gets_no_hook_env() {
+    let yes = |_: &Path| true;
+    let h = hist(&["ls"]);
+    let mut i = with_nonce(input(ShellKind::Bash, &[], None, &yes), "abc123", &h);
+    i.inherited_prompt_command = true;
+    let plan = prepare(&i);
+    // Nothing would unset these, so they must not leak into every child process.
+    assert!(env(&plan, "EMBER_HIST").is_none());
+    assert!(env(&plan, "EMBER_NONCE").is_none());
+}
+
+#[test]
+fn pwsh_running_a_command_or_file_gets_no_hook_env() {
+    let yes = |_: &Path| true;
+    let h = hist(&["ls"]);
+    let args = vec!["-Command".to_string(), "x".to_string()];
+    let plan = prepare(&with_nonce(
+        input(ShellKind::Pwsh, &args, None, &yes),
+        "abc123",
+        &h,
+    ));
+    assert!(env(&plan, "EMBER_HIST").is_none());
+    assert!(env(&plan, "EMBER_NONCE").is_none());
+}
+
+#[test]
+fn restored_history_keeps_only_the_newest_ten_short_lines() {
+    let yes = |_: &Path| true;
+    let many: Vec<String> = (0..15).map(|n| format!("c{n}")).collect();
+    let mut i = input(ShellKind::Bash, &[], None, &yes);
+    i.restore_history = &many;
+    let value = env(&prepare(&i), "EMBER_HIST").unwrap().to_string();
+    assert_eq!(value.lines().count(), 10);
+    assert!(value.starts_with("c5\n") && value.ends_with("c14"));
+
+    let long = vec!["x".repeat(1001), "ok".to_string()];
+    i.restore_history = &long;
+    assert_eq!(env(&prepare(&i), "EMBER_HIST"), Some("ok"));
+}
+
+/// A real bash for the end-to-end test. On Windows `bash` on PATH is usually the WSL launcher, which
+/// is not the shell this hook runs in, so only Git Bash is used there.
+fn test_bash() -> Option<std::path::PathBuf> {
+    let path = if cfg!(windows) {
+        std::path::PathBuf::from(r"C:\Program Files\Git\bin\bash.exe")
+    } else {
+        std::path::PathBuf::from("bash")
+    };
+    std::process::Command::new(&path)
+        .arg("--version")
+        .output()
+        .is_ok()
+        .then_some(path)
+}
+
+/// Runs the real bash hook in an interactive bash; skipped where bash is not installed.
+#[test]
+fn bash_hook_end_to_end() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let Some(bash) = test_bash() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let hist_file = dir.path().join("hist");
+    let mut child = Command::new(bash)
+        .args(["--norc", "--noprofile", "-i"])
+        .env("PROMPT_COMMAND", BASH_OSC7)
+        .env("EMBER_HIST", "-n x\necho $HOME `id`")
+        .env("EMBER_NONCE", "abc123")
+        .env("HISTFILE", hist_file.to_string_lossy().replace('\\', "/"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"history\n hidden\necho 'a;b%c'\n\necho x\nexit\n")
+        .unwrap();
+    let out = String::from_utf8_lossy(&child.wait_with_output().unwrap().stdout).into_owned();
+
+    // Seeded lines are literal history entries, never executed or expanded.
+    assert!(
+        out.contains("-n x") && out.contains("echo $HOME `id`"),
+        "{out}"
+    );
+    // The command is encoded and carries the nonce; a leading space survives so the app can drop it.
+    assert!(out.contains("133;E;abc123;echo 'a%3Bb%25c'"), "{out}");
+    assert!(out.contains("133;E;abc123; hidden"), "{out}");
+    // history, hidden, echo a;b, echo x: not the seeds, not an empty Enter.
+    assert_eq!(out.matches("133;E;").count(), 4, "{out}");
+    // Seeds stay in memory but are not appended to the user's history file on exit.
+    let saved = std::fs::read_to_string(&hist_file).unwrap_or_default();
+    assert!(
+        saved.contains("echo x"),
+        "bash did not save history: {saved:?}"
+    );
+    assert!(!saved.contains("echo $HOME"), "{saved:?}");
 }
