@@ -4,6 +4,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Fixed
+
+- The terminal right-click menu is no longer hidden behind the status bar when you open it near the bottom of the window.
+
 ## [1.1.0] - 2026-11-09
 
 ### Highlights
