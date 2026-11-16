@@ -30,6 +30,7 @@
   import {
     tabs, activeCwd, activeShell,
     addTab, removeTab, activateTab, moveTab, setPaneCwd, setTabTitle,
+    pushPaneCommand, restoreTabHistory,
     setTabSplit, clearTabSplit, pushToast, restoreCustomTitle,
   } from "./stores/app.js";
 
@@ -156,7 +157,7 @@
     return pickProfile(profileCache, profileId, defaultProfileId);
   }
 
-  async function openNewTab(profileId?: string, cwd?: string): Promise<string | null> {
+  async function openNewTab(profileId?: string, cwd?: string, history?: string[]): Promise<string | null> {
     try {
       if (!profileCache.length) { try { profileCache = await profileList(); } catch { /* ignore */ } }
       const profile = resolveProfile(profileId);
@@ -164,7 +165,7 @@
       const shell  = profile ? shellBasename(profile.shell) : "";
       // Spawn the resolved profile, not the requested id: a dangling default_profile
       // must not make Rust pick a different shell than the tab is labelled with.
-      const sessionId = await spawnPane(profile?.id, cwd);
+      const sessionId = await spawnPane(profile?.id, cwd, history);
       return addTab(sessionId, label || "Shell", shell, profile?.id);
     } catch (e) {
       // A toast, not the full-screen error splash: other (restored) tabs must stay usable.
@@ -173,23 +174,25 @@
     }
   }
 
-  async function splitTab(tabId: string, direction: "horizontal" | "vertical", profileId?: string, cwd?: string) {
+  async function splitTab(tabId: string, direction: "horizontal" | "vertical", profileId?: string, cwd?: string, history?: string[]) {
     try {
       const profile = resolveProfile(profileId);
-      const sessionId = await spawnPane(profile?.id, cwd);
+      const sessionId = await spawnPane(profile?.id, cwd, history);
       setTabSplit(tabId, sessionId, direction, profile?.id);
     } catch (e) { pushToast(`Failed to split pane: ${e}`); }
   }
 
   /** Fresh shells for one saved tab: its panes' profile and folder, split and custom title. */
   async function openSavedTab(t: SavedTab): Promise<string | null> {
-    const id = await openNewTab(t.pane.profile_id, t.pane.cwd);
+    const id = await openNewTab(t.pane.profile_id, t.pane.cwd, t.pane.history);
     if (!id) return null;
     if (t.custom_title && t.title) restoreCustomTitle(id, t.title);
     if (t.split) {
       const dir = t.split.direction === "vertical" ? "vertical" : "horizontal";
-      await splitTab(id, dir, t.split.pane.profile_id, t.split.pane.cwd);
+      await splitTab(id, dir, t.split.pane.profile_id, t.split.pane.cwd, t.split.pane.history);
     }
+    // The store must hold the list too, or the next autosave would drop it.
+    restoreTabHistory(id, t.pane.history, t.split?.pane.history);
     return id;
   }
 
@@ -279,6 +282,7 @@
           onResize={tab.isActive ? (c, r) => { termCols = c; termRows = r; } : undefined}
           onCloseSplit={() => closeSplitPane(tab.id)}
           onPaneCwd={setPaneCwd}
+          onPaneCommand={pushPaneCommand}
           onPaneTitle={handlePaneTitle}
         />
       {/each}

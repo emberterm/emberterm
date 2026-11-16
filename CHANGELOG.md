@@ -4,6 +4,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- **Command history per tab:** a reopened tab remembers its last 10 commands, so Up recalls them in Git Bash, WSL and pwsh. Commands that start with a space or look like they contain a secret (`token=`, `password:`, `Authorization`, ...) are skipped, but the filter is best effort and `session.json` is plain text. (#50)
+
 ### Fixed
 
 - The terminal right-click menu is no longer hidden behind the status bar when you open it near the bottom of the window.

@@ -1,4 +1,5 @@
 import { writable, derived, get } from "svelte/store";
+import { HISTORY_MAX, appendCommand, shouldRecord } from "../utils/history.js";
 
 export interface Tab {
   id: string;
@@ -9,6 +10,8 @@ export interface Tab {
   /** True once the user renamed the tab; shell titles no longer apply. */
   customTitle: boolean;
   cwd?: string;
+  /** Last commands typed in the primary pane, newest last (saved with the session). */
+  history?: string[];
   isActive: boolean;
   /** Output arrived while this tab was in the background and has not been viewed yet. */
   hasUnread: boolean;
@@ -19,6 +22,7 @@ export interface Tab {
   splitDirection?: "horizontal" | "vertical";
   splitProfileId?: string;
   splitCwd?: string;
+  splitHistory?: string[];
 }
 
 export const tabs = writable<Tab[]>([]);
@@ -182,12 +186,44 @@ export function moveTab(tabId: string, toIndex: number) {
   });
 }
 
+/** A command reported by either pane of a tab (OSC 133;E); filtered, capped and de-duplicated. */
+export function pushPaneCommand(sessionId: string, cmd: string) {
+  if (!shouldRecord(cmd)) return;
+  updateTabsIfChanged((ts) => {
+    let changed = false;
+    const next = ts.map((t) => {
+      // A repeat of the pane's last command is the only case appendCommand leaves unchanged.
+      if (t.sessionId === sessionId && t.history?.at(-1) !== cmd) {
+        changed = true;
+        return { ...t, history: appendCommand(t.history ?? [], cmd) };
+      }
+      if (t.splitSessionId === sessionId && t.splitHistory?.at(-1) !== cmd) {
+        changed = true;
+        return { ...t, splitHistory: appendCommand(t.splitHistory ?? [], cmd) };
+      }
+      return t;
+    });
+    return changed ? next : null;
+  });
+}
+
+/** Puts a restored tab's saved commands back in the store so the next autosave keeps them. */
+export function restoreTabHistory(tabId: string, history?: string[], splitHistory?: string[]) {
+  tabs.update((ts) =>
+    ts.map((t) =>
+      t.id === tabId
+        ? { ...t, history: history?.slice(-HISTORY_MAX), splitHistory: splitHistory?.slice(-HISTORY_MAX) }
+        : t,
+    ),
+  );
+}
+
 /** Remove the split — the secondary session has already been closed by the caller. */
 export function clearTabSplit(tabId: string) {
   tabs.update((ts) =>
     ts.map((t) =>
       t.id === tabId
-        ? { ...t, splitSessionId: undefined, splitDirection: undefined, splitProfileId: undefined, splitCwd: undefined }
+        ? { ...t, splitSessionId: undefined, splitDirection: undefined, splitProfileId: undefined, splitCwd: undefined, splitHistory: undefined }
         : t,
     ),
   );

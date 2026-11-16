@@ -14,6 +14,9 @@ pub struct SavedPane {
     pub profile_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    /// Last commands typed in this pane (newest last), replayed into the new shell's history.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

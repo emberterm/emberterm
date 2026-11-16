@@ -11,12 +11,14 @@ fn sample() -> SavedSession {
                 pane: SavedPane {
                     profile_id: Some("git-bash".into()),
                     cwd: Some("/d/code/api".into()),
+                    history: vec!["ls".into(), "git status".into()],
                 },
                 split: Some(SavedSplit {
                     direction: "vertical".into(),
                     pane: SavedPane {
                         profile_id: Some("wsl".into()),
                         cwd: Some("/home/me".into()),
+                        history: vec![],
                     },
                 }),
             },
@@ -76,4 +78,40 @@ fn save_rejects_wrong_version() {
 fn none_fields_are_omitted_from_json() {
     let json = serde_json::to_string(&SavedTab::default()).unwrap();
     assert!(!json.contains("null"), "{json}");
+}
+
+#[test]
+fn history_round_trips() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("session.json");
+    save_to(&path, &sample()).unwrap();
+    let (loaded, _) = load_from(&path);
+    assert_eq!(
+        loaded.unwrap().tabs[0].pane.history,
+        vec!["ls".to_string(), "git status".to_string()]
+    );
+}
+
+#[test]
+fn old_file_without_history_loads() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("session.json");
+    std::fs::write(
+        &path,
+        r#"{"version":1,"active_tab":0,"tabs":[{"custom_title":false,"pane":{"profile_id":"pwsh","cwd":"D:/x"}}]}"#,
+    )
+    .unwrap();
+    let (loaded, warning) = load_from(&path);
+    assert!(warning.is_none());
+    assert!(loaded.unwrap().tabs[0].pane.history.is_empty());
+}
+
+#[test]
+fn empty_history_is_not_serialized() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("session.json");
+    let mut s = sample();
+    s.tabs[0].pane.history.clear();
+    save_to(&path, &s).unwrap();
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("history"));
 }
