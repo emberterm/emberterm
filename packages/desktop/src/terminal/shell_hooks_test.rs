@@ -297,6 +297,11 @@ fn hooks_emit_command_marks() {
     assert!(decode_utf16le_base64(&pwsh.args[2]).contains("133;E;"));
 }
 
+/// A token made at run time, like the real one (random per session), not a literal in the source.
+fn test_nonce() -> String {
+    format!("n{}", std::process::id())
+}
+
 fn with_nonce<'a>(mut i: HookInput<'a>, nonce: &'a str, hist: &'a [String]) -> HookInput<'a> {
     i.nonce = Some(nonce);
     i.restore_history = hist;
@@ -307,14 +312,15 @@ fn with_nonce<'a>(mut i: HookInput<'a>, nonce: &'a str, hist: &'a [String]) -> H
 fn nonce_and_history_are_set_where_the_hook_is_installed() {
     let yes = |_: &Path| true;
     let h = hist(&["ls"]);
+    let tok = test_nonce();
     for kind in [ShellKind::Bash, ShellKind::Wsl, ShellKind::Pwsh] {
-        let plan = prepare(&with_nonce(input(kind, &[], None, &yes), "abc123", &h));
-        assert_eq!(env(&plan, "EMBER_NONCE"), Some("abc123"), "{kind:?}");
+        let plan = prepare(&with_nonce(input(kind, &[], None, &yes), &tok, &h));
+        assert_eq!(env(&plan, "EMBER_NONCE"), Some(tok.as_str()), "{kind:?}");
         assert_eq!(env(&plan, "EMBER_HIST"), Some("ls"), "{kind:?}");
     }
     let wsl = prepare(&with_nonce(
         input(ShellKind::Wsl, &[], None, &yes),
-        "abc123",
+        &tok,
         &h,
     ));
     assert!(env(&wsl, "WSLENV").unwrap().contains("EMBER_NONCE/u"));
@@ -339,7 +345,8 @@ fn invalid_or_missing_nonce_sets_no_env() {
 fn bash_with_inherited_prompt_command_gets_no_hook_env() {
     let yes = |_: &Path| true;
     let h = hist(&["ls"]);
-    let mut i = with_nonce(input(ShellKind::Bash, &[], None, &yes), "abc123", &h);
+    let tok = test_nonce();
+    let mut i = with_nonce(input(ShellKind::Bash, &[], None, &yes), &tok, &h);
     i.inherited_prompt_command = true;
     let plan = prepare(&i);
     // Nothing would unset these, so they must not leak into every child process.
@@ -352,9 +359,10 @@ fn pwsh_running_a_command_or_file_gets_no_hook_env() {
     let yes = |_: &Path| true;
     let h = hist(&["ls"]);
     let args = vec!["-Command".to_string(), "x".to_string()];
+    let tok = test_nonce();
     let plan = prepare(&with_nonce(
         input(ShellKind::Pwsh, &args, None, &yes),
-        "abc123",
+        &tok,
         &h,
     ));
     assert!(env(&plan, "EMBER_HIST").is_none());
@@ -399,11 +407,12 @@ fn bash_hook_end_to_end() {
     let Some(bash) = test_bash() else { return };
     let dir = tempfile::tempdir().unwrap();
     let hist_file = dir.path().join("hist");
+    let tok = test_nonce();
     let mut child = Command::new(bash)
         .args(["--norc", "--noprofile", "-i"])
         .env("PROMPT_COMMAND", BASH_OSC7)
         .env("EMBER_HIST", "-n x\necho $HOME `id`")
-        .env("EMBER_NONCE", "abc123")
+        .env("EMBER_NONCE", &tok)
         .env("HISTFILE", hist_file.to_string_lossy().replace('\\', "/"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -424,8 +433,11 @@ fn bash_hook_end_to_end() {
         "{out}"
     );
     // The command is encoded and carries the nonce; a leading space survives so the app can drop it.
-    assert!(out.contains("133;E;abc123;echo 'a%3Bb%25c'"), "{out}");
-    assert!(out.contains("133;E;abc123; hidden"), "{out}");
+    assert!(
+        out.contains(&format!("133;E;{tok};echo 'a%3Bb%25c'")),
+        "{out}"
+    );
+    assert!(out.contains(&format!("133;E;{tok}; hidden")), "{out}");
     // history, hidden, echo a;b, echo x: not the seeds, not an empty Enter.
     assert_eq!(out.matches("133;E;").count(), 4, "{out}");
     // Seeds stay in memory but are not appended to the user's history file on exit.
