@@ -2,6 +2,7 @@
   import { profileUpsert, profileDelete, type Profile } from "../ipc/client.js";
   import { Btn } from "@emberterm/ui";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { untrack } from "svelte";
 
   interface Props {
     profile?: Profile;
@@ -13,13 +14,17 @@
 
   let { profile, onSave, onCancel, onTest, onDelete }: Props = $props();
 
-  let id = $state(profile?.id ?? crypto.randomUUID().slice(0, 8));
-  let name = $state(profile?.name ?? "New Profile");
-  let shell = $state(profile?.shell ?? "");
-  let argsStr = $state((profile?.args ?? []).join(" "));
-  let cwd = $state(profile?.cwd ?? "~");
+  // Deliberate one-time copy: the form is a draft the user edits. SettingsPanel mounts a fresh
+  // editor for each Edit/New click, so the prop never changes while one is open.
+  const initial = untrack(() => profile);
+
+  let id = $state(initial?.id ?? crypto.randomUUID().slice(0, 8));
+  let name = $state(initial?.name ?? "New Profile");
+  let shell = $state(initial?.shell ?? "");
+  let argsStr = $state((initial?.args ?? []).join(" "));
+  let cwd = $state(initial?.cwd ?? "~");
   let envRows = $state<{ key: string; val: string }[]>(
-    Object.entries(profile?.env ?? {}).map(([key, val]) => ({ key, val })),
+    Object.entries(initial?.env ?? {}).map(([key, val]) => ({ key, val })),
   );
 
   let saving = $state(false);
@@ -177,7 +182,7 @@
     letter-spacing: 0.05em;
   }
 
-  input, select {
+  input {
     background: var(--bg, #0d1117);
     border: 1px solid var(--border, #21262d);
     border-radius: 4px;
@@ -190,8 +195,7 @@
     box-sizing: border-box;
   }
 
-  input:focus, select:focus { border-color: var(--accent, #FF6B35); }
-  input[type="number"] { padding: 6px 8px; }
+  input:focus { border-color: var(--accent, #FF6B35); }
 
   .input-with-btn { display: flex; gap: 4px; }
   .browse-btn {
