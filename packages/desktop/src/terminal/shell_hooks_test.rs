@@ -416,7 +416,7 @@ fn bash_hook_end_to_end() {
     let dir = tempfile::tempdir().unwrap();
     let hist_file = dir.path().join("hist");
     let tok = test_nonce();
-    let mut child = Command::new(bash)
+    let mut child = Command::new(&bash)
         .args(["--norc", "--noprofile", "-i"])
         .env("PROMPT_COMMAND", BASH_OSC7)
         .env("EMBER_HIST", "-n x\necho $HOME `id`")
@@ -454,5 +454,19 @@ fn bash_hook_end_to_end() {
         saved.contains("echo x"),
         "bash did not save history: {saved:?}"
     );
-    assert!(!saved.contains("echo $HOME"), "{saved:?}");
+    // bash 3.2 (macOS /bin/bash) has no way to mark seeded lines as saved, so it writes them back.
+    if bash_major(&bash) >= 4 {
+        assert!(!saved.contains("echo $HOME"), "{saved:?}");
+    }
+}
+
+fn bash_major(bash: &std::path::Path) -> u32 {
+    let out = std::process::Command::new(bash)
+        .args(["-c", "echo ${BASH_VERSINFO[0]}"])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse()
+        .unwrap_or(0)
 }
