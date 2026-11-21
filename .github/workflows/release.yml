@@ -93,7 +93,9 @@ jobs:
 
   # The landing page reads the latest release at build time, so rebuild it once every platform
   # has uploaded its assets (it fails the build on a missing installer). Needs the repo secret
-  # SITE_DEPLOY_HOOK_URL, a Vercel deploy hook; without it the step only warns.
+  # SITE_DISPATCH_TOKEN, a fine-grained token for emberterm/emberterm.github.io with Contents:
+  # read and write (GITHUB_TOKEN cannot dispatch to another repo); without it the step only warns
+  # and the site's daily run picks the release up.
   site:
     name: Rebuild site
     needs: build
@@ -101,12 +103,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Trigger deploy hook
+      - name: Dispatch site rebuild
         env:
-          HOOK_URL: ${{ secrets.SITE_DEPLOY_HOOK_URL }}
+          TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
         run: |
-          if [ -z "$HOOK_URL" ]; then
-            echo "::warning::SITE_DEPLOY_HOOK_URL is not set; the site was not rebuilt."
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::SITE_DISPATCH_TOKEN is not set; the site was not rebuilt."
             exit 0
           fi
-          curl --fail --silent --show-error --max-time 30 -X POST "$HOOK_URL" > /dev/null
+          curl --fail --silent --show-error --max-time 30 -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -d '{"event_type":"release-published"}' \
+            https://api.github.com/repos/emberterm/emberterm.github.io/dispatches > /dev/null

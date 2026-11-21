@@ -88,8 +88,9 @@ updates with the `TAURI_SIGNING_PRIVATE_KEY` repo secret and publishes `latest.j
 what **Settings → About → Check for updates** reads. Keep the private key (`~/.tauri/emberterm.key`) safe:
 without it installed copies cannot verify any later update.
 
-After the platform jobs finish, a last job posts to the Vercel deploy hook in the repo secret `SITE_DEPLOY_HOOK_URL`, so the landing page
-(emberterm-web) rebuilds with the new version. Pre-releases skip it, and without the secret it only warns.
+After the platform jobs finish, a last job sends a `release-published` dispatch to `emberterm/emberterm.github.io`
+with the repo secret `SITE_DISPATCH_TOKEN`, so the landing page rebuilds with the new version. Pre-releases skip it,
+and without the secret it only warns; the site also rebuilds daily.
 
 ## License
 
