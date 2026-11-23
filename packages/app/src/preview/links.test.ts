@@ -54,3 +54,27 @@ describe("classifyLink", () => {
     },
   );
 });
+
+describe("resolveRelative on a macOS or Linux path", () => {
+  const POSIX_DOC = "/Users/me/api/README.md";
+
+  it("joins to the document's folder and keeps the leading slash", () => {
+    expect(resolveRelative(POSIX_DOC, "docs/setup.md")).toBe("/Users/me/api/docs/setup.md");
+    expect(resolveRelative(POSIX_DOC, "./a.md")).toBe("/Users/me/api/a.md");
+  });
+
+  it("walks up, but never above the root", () => {
+    expect(resolveRelative(POSIX_DOC, "../x.md")).toBe("/Users/me/x.md");
+    expect(resolveRelative(POSIX_DOC, "../../../../x.md")).toBe("/x.md");
+  });
+
+  it("treats a leading slash as the root, and decodes escapes", () => {
+    expect(resolveRelative(POSIX_DOC, "/etc/y.md")).toBe("/etc/y.md");
+    expect(resolveRelative(POSIX_DOC, "a%20b.md#h")).toBe("/Users/me/api/a b.md");
+  });
+
+  it("gives classifyLink a usable path for a relative Markdown link", () => {
+    expect(classifyLink("docs/a.md", POSIX_DOC)).toEqual({ kind: "markdown", path: "/Users/me/api/docs/a.md" });
+    expect(classifyLink("manual.pdf", POSIX_DOC).kind).toBe("blocked");
+  });
+});

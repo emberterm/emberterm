@@ -40,7 +40,7 @@ packages/desktop/src/
   session_store.rs       ← session.json (tabs, splits, folders, per-pane command history) load/save
   watcher.rs             ← notify watcher: config.toml / profiles hot-reload, app:warning
   preview.rs             ← Markdown preview commands: file_preview (1 MB), file_preview_image (5 MB), file_preview_stat, preview_resolve; PreviewError
-  preview_path.rs        ← shell path → Windows path (Git Bash /d/x, WSL /mnt and \\wsl.localhost, pwsh); refuses network paths
+  preview_path.rs        ← shell path → Windows path (Git Bash /d/x, WSL /mnt and \\wsl.localhost, pwsh); on macOS and Linux paths stay POSIX (`Host`); refuses network paths
   terminal/
     pty.rs               ← spawn_session(): reader thread, DEC 2026 coalescing, Channel send, exit wait thread
     output.rs            ← batches PTY output (8 ms or 64 KB) so a flood is not bound by per-send IPC cost
