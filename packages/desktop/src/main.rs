@@ -5,6 +5,7 @@ mod fonts;
 mod fsutil;
 mod git;
 mod ipc;
+mod preview_path;
 mod profile;
 mod session_store;
 mod state;
