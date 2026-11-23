@@ -1,14 +1,33 @@
 use super::*;
 
-fn ok(kind: ShellKind, distro: Option<&str>, cwd: &str, raw: &str) -> String {
-    resolve_preview_path(kind, distro, cwd, raw)
+const WIN_HOME: &str = r"C:\Users\test";
+const MAC_HOME: &str = "/Users/me";
+
+fn ok_on(
+    host: Host,
+    home: &str,
+    kind: ShellKind,
+    distro: Option<&str>,
+    cwd: &str,
+    raw: &str,
+) -> String {
+    resolve_with(host, Some(home), kind, distro, cwd, raw)
         .unwrap_or_else(|e| panic!("{raw:?} in {cwd:?}: {e}"))
         .to_string_lossy()
         .into_owned()
 }
 
+fn err_on(host: Host, kind: ShellKind, distro: Option<&str>, cwd: &str, raw: &str) -> PathError {
+    resolve_with(host, Some(MAC_HOME), kind, distro, cwd, raw).unwrap_err()
+}
+
+// The tests below pin the Windows host, whatever machine runs them.
+fn ok(kind: ShellKind, distro: Option<&str>, cwd: &str, raw: &str) -> String {
+    ok_on(Host::Windows, WIN_HOME, kind, distro, cwd, raw)
+}
+
 fn err(kind: ShellKind, distro: Option<&str>, cwd: &str, raw: &str) -> PathError {
-    resolve_preview_path(kind, distro, cwd, raw).unwrap_err()
+    err_on(Host::Windows, kind, distro, cwd, raw)
 }
 
 #[test]
@@ -54,14 +73,7 @@ fn pwsh_paths() {
     let p = ShellKind::Pwsh;
     let cwd = "D:/code/api";
     assert_eq!(ok(p, None, cwd, r".\docs\a.md"), "D:/code/api/docs/a.md");
-    let home = dirs::home_dir()
-        .unwrap()
-        .to_string_lossy()
-        .replace('\\', "/");
-    assert_eq!(
-        ok(p, None, cwd, "~/n.md").to_lowercase(),
-        format!("{home}/n.md").to_lowercase()
-    );
+    assert_eq!(ok(p, None, cwd, "~/n.md"), "C:/Users/test/n.md");
     assert_eq!(ok(p, None, cwd, "/x/a.md"), "D:/x/a.md");
 }
 
@@ -143,4 +155,87 @@ fn wsl_list_output_is_utf16() {
         Some("Ubuntu-22.04")
     );
     assert_eq!(parse_wsl_list(&[]), None);
+}
+
+// On macOS and Linux the shell prints plain POSIX paths and there are no drives to map to.
+fn unix(kind: ShellKind, cwd: &str, raw: &str) -> String {
+    ok_on(Host::Unix, MAC_HOME, kind, None, cwd, raw)
+}
+
+#[test]
+fn unix_host_keeps_paths_as_they_are() {
+    let cwd = "/Users/me/api";
+    for kind in [ShellKind::Bash, ShellKind::Pwsh, ShellKind::Other] {
+        assert_eq!(unix(kind, cwd, "README.md"), "/Users/me/api/README.md");
+        assert_eq!(unix(kind, cwd, "./docs/a.md"), "/Users/me/api/docs/a.md");
+        assert_eq!(unix(kind, cwd, "../b.md"), "/Users/me/b.md");
+        assert_eq!(unix(kind, cwd, "/tmp/a.md"), "/tmp/a.md");
+        assert_eq!(
+            unix(kind, cwd, "\"my notes.md\""),
+            "/Users/me/api/my notes.md"
+        );
+    }
+}
+
+#[test]
+fn unix_host_expands_the_home_folder() {
+    assert_eq!(
+        unix(ShellKind::Bash, "/Users/me/api", "~/n.md"),
+        "/Users/me/n.md"
+    );
+    assert_eq!(
+        unix(ShellKind::Pwsh, "/Users/me/api", "~/docs/n.md"),
+        "/Users/me/docs/n.md"
+    );
+}
+
+#[test]
+fn unix_host_clamps_dotdot_at_the_root() {
+    assert_eq!(
+        unix(ShellKind::Bash, "/Users/me", "../../../../x.md"),
+        "/x.md"
+    );
+}
+
+#[test]
+fn unix_host_has_no_drives_and_no_network_paths() {
+    let e = |raw: &str| err_on(Host::Unix, ShellKind::Bash, None, "/Users/me", raw);
+    assert!(matches!(e(r"C:\x\a.md"), PathError::Unresolvable(_)));
+    assert!(matches!(e("//srv/share/a.md"), PathError::Unresolvable(_)));
+    assert!(matches!(
+        e("//attacker/share/a.md"),
+        PathError::Unresolvable(_)
+    ));
+    assert!(matches!(
+        err_on(
+            Host::Unix,
+            ShellKind::Bash,
+            None,
+            "//attacker/share",
+            "a.md"
+        ),
+        PathError::Unresolvable(_)
+    ));
+}
+
+#[test]
+fn unix_host_has_no_wsl() {
+    // WSL only exists on Windows; a "wsl" profile name on another host is just a shell.
+    let w = err_on(
+        Host::Unix,
+        ShellKind::Wsl,
+        Some("Ubuntu"),
+        "/home/u",
+        "~/a.md",
+    );
+    assert!(matches!(w, PathError::Unresolvable(_)));
+    assert_eq!(unix(ShellKind::Wsl, "/home/u", "a.md"), "/home/u/a.md");
+}
+
+#[test]
+fn unix_host_needs_a_folder_for_a_relative_path() {
+    assert!(matches!(
+        err_on(Host::Unix, ShellKind::Bash, None, "", "a.md"),
+        PathError::Unresolvable(_)
+    ));
 }
