@@ -62,6 +62,20 @@ inside the app.
 - **macOS:** open the `.dmg` and drag EmberTerm to Applications. It is one app for Apple silicon and
   Intel. If macOS blocks the first launch, allow it in System Settings → Privacy & Security.
 
+## Code signing policy
+
+Windows installers are not code-signed yet, so SmartScreen may warn on first run. EmberTerm is applying for
+free code signing provided by SignPath.io, certificate by SignPath Foundation. If the application is accepted,
+this policy applies to the Windows installers:
+
+- Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+- **Authors, reviewers and approvers:** the EmberTerm maintainers ([owners](https://github.com/orgs/emberterm/people?query=role%3Aowner)).
+- **What is signed:** only installers built by the [Release workflow](.github/workflows/release.yml) from a version tag in this repository, and only after a maintainer approves the signing request for that release.
+- **Privacy:** EmberTerm has no telemetry and sends nothing about you. Check for updates asks GitHub for the latest release and its notes (anonymous requests to `github.com` and `api.github.com`); links open only when you click them.
+
+macOS builds are ad-hoc signed and not notarized, because notarization needs a paid Apple Developer Program
+membership. See [#62](https://github.com/emberterm/emberterm/issues/62) for the signing plan.
+
 ## Development
 
 Prerequisites: [Rust](https://rustup.rs/) 1.85+, [Node.js](https://nodejs.org/) 22+,
