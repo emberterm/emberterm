@@ -66,19 +66,19 @@ inside the app.
   Open no longer gets past it. From a terminal, `xattr -dr com.apple.quarantine /Applications/EmberTerm.app`
   clears the block too.
 
-## Code signing policy
+## Code signing
 
-Windows installers are not code-signed yet, so SmartScreen may warn on first run. EmberTerm is applying for
-free code signing provided by SignPath.io, certificate by SignPath Foundation. If the application is accepted,
-this policy applies to the Windows installers:
+Windows installers are not code-signed, so SmartScreen may warn on first run. macOS builds are ad-hoc signed
+and not notarized, because notarization needs a paid Apple Developer Program membership. Both are free-only
+for now: SignPath Foundation's free signing for open source declined the project because it needs more public
+visibility first, and it may be retried later. See [#62](https://github.com/emberterm/emberterm/issues/62).
 
-- Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-- **Authors, reviewers and approvers:** the EmberTerm maintainers ([owners](https://github.com/orgs/emberterm/people?query=role%3Aowner)).
-- **What is signed:** only installers built by the [Release workflow](.github/workflows/release.yml) from a version tag in this repository, and only after a maintainer approves the signing request for that release.
-- **Privacy:** EmberTerm has no telemetry and sends nothing about you. Check for updates asks GitHub for the latest release and its notes (anonymous requests to `github.com` and `api.github.com`); links open only when you click them.
+Updates are checked against the project's own signing key (the public key is in `tauri.conf.json`), whatever
+the operating system says about the installer.
 
-macOS builds are ad-hoc signed and not notarized, because notarization needs a paid Apple Developer Program
-membership. See [#62](https://github.com/emberterm/emberterm/issues/62) for the signing plan.
+**Privacy:** EmberTerm has no telemetry and sends nothing about you. Check for updates asks GitHub for the
+latest release and its notes (anonymous requests to `github.com` and `api.github.com`); links open only when
+you click them.
 
 ## Development
 
