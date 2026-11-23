@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { ImageBudget, bytesToDataUrl, enhanceImages } from "./images.js";
+import { ImageBudget, bytesToDataUrl, deferImages, enhanceImages, loadImages } from "./images.js";
 
 const DOC = "D:\\code\\api\\README.md";
 
@@ -25,12 +25,13 @@ describe("bytesToDataUrl", () => {
 });
 
 describe("ImageBudget", () => {
-  it("accepts bytes until the limit and then refuses", () => {
+  it("accepts bytes until the limit, and once one does not fit nothing more is taken", () => {
     const b = new ImageBudget(10);
     expect(b.take(6)).toBe(true);
     expect(b.remaining).toBe(4);
     expect(b.take(6)).toBe(false);
-    expect(b.remaining).toBe(4);
+    expect(b.remaining).toBe(0);
+    expect(b.take(1)).toBe(false);
   });
 });
 
@@ -75,7 +76,7 @@ describe("enhanceImages", () => {
 
   it("stops loading once the document's budget is spent", async () => {
     const load = vi.fn(async () => new Uint8Array(1));
-    const root = html('<img src="a.png" alt="a">'.repeat(300));
+    const root = html(Array.from({ length: 300 }, (_, i) => `<img src="a${i}.png" alt="a">`).join(""));
     await enhanceImages(root, DOC, load, new ImageBudget(5));
     expect(load).toHaveBeenCalledTimes(5);
     expect(root.querySelectorAll("img")).toHaveLength(5);
@@ -88,5 +89,57 @@ describe("enhanceImages", () => {
     await enhanceImages(root, DOC, load, new ImageBudget(10));
     expect(root.querySelectorAll("img")).toHaveLength(1);
     expect(root.querySelectorAll(".blocked-image")).toHaveLength(1);
+  });
+});
+
+describe("deferImages and loadImages", () => {
+  it("takes the src off local images at once, so nothing is requested from the app's own origin", () => {
+    const root = html('<img src="a.png" alt="a"><img src="https://x.dev/r.png" alt="r"><img src="data:image/png;base64,AAAA" alt="d">');
+    deferImages(root);
+    const imgs = [...root.querySelectorAll("img")];
+    expect(imgs).toHaveLength(2);
+    expect(imgs[0].hasAttribute("src")).toBe(false);
+    expect(imgs[0].getAttribute("data-pending-src")).toBe("a.png");
+    expect(imgs[1].getAttribute("src")).toBe("data:image/png;base64,AAAA");
+    expect(root.querySelector(".blocked-image")?.textContent).toBe("Remote image blocked: r");
+  });
+
+  it("fills the images in afterwards", async () => {
+    const load = vi.fn(async () => new Uint8Array([1, 2, 3]));
+    const root = html('<img src="a.png" alt="a">');
+    deferImages(root);
+    await loadImages(root, DOC, load, new ImageBudget());
+    const img = root.querySelector("img")!;
+    expect(img.getAttribute("src")).toBe("data:image/png;base64,AQID");
+    expect(img.hasAttribute("data-pending-src")).toBe(false);
+  });
+
+  it("reads an image used several times once", async () => {
+    const load = vi.fn(async () => new Uint8Array([1]));
+    const root = html('<img src="a.png" alt="1"><img src="./a.png" alt="2"><img src="a.png" alt="3">');
+    await enhanceImages(root, DOC, load, new ImageBudget());
+    expect(load).toHaveBeenCalledTimes(1);
+    expect([...root.querySelectorAll("img")].every((i) => i.getAttribute("src")?.startsWith("data:image/png"))).toBe(true);
+  });
+
+  it("stops reading once an image did not fit the budget", async () => {
+    const load = vi.fn(async (p: string) => new Uint8Array(p.endsWith("big.png") ? 12 : 1));
+    const root = html('<img src="big.png" alt="b"><img src="small.png" alt="s">');
+    await enhanceImages(root, DOC, load, new ImageBudget(10));
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(root.querySelectorAll("img")).toHaveLength(0);
+    expect(root.querySelectorAll(".blocked-image")).toHaveLength(2);
+  });
+
+  it("stops at once when the render it belongs to was replaced", async () => {
+    let cancelled = false;
+    const load = vi.fn(async () => {
+      cancelled = true;
+      return new Uint8Array([1]);
+    });
+    const root = html('<img src="a.png" alt="a"><img src="b.png" alt="b"><img src="c.png" alt="c">');
+    deferImages(root);
+    await loadImages(root, DOC, load, new ImageBudget(), () => cancelled);
+    expect(load).toHaveBeenCalledTimes(1);
   });
 });

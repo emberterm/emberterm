@@ -5,7 +5,7 @@
   import { pushToast } from "../stores/app.js";
   import { renderMarkdown } from "./markdown.js";
   import { assignHeadingIds } from "./slug.js";
-  import { enhanceImages, ImageBudget } from "./images.js";
+  import { deferImages, loadImages, ImageBudget } from "./images.js";
   import { classifyLink } from "./links.js";
   import { highlightFragment } from "./highlight.js";
 
@@ -34,26 +34,38 @@
     try {
       const fragment = await renderMarkdown(t);
       assignHeadingIds(fragment);
-      // Images are read before the fragment is inserted: a relative src in the page would make
-      // the webview request it from its own origin.
-      await enhanceImages(fragment, p, filePreviewImage, new ImageBudget());
+      // Local images lose their src first (a relative src would be requested from the webview's
+      // own origin); the text is shown at once and the images fill in as they are read.
+      deferImages(fragment);
       await highlightFragment(fragment);
       if (mine !== seq) return;
       const keep = renderedPath === p ? root.scrollTop : 0;
       root.replaceChildren(fragment);
       root.scrollTop = keep;
       renderedPath = p;
+      await loadImages(root, p, filePreviewImage, new ImageBudget(), () => mine !== seq);
     } catch (e) {
       console.error(e);
       if (mine === seq) pushToast("Could not render this file");
     }
   }
 
+  // Anything with an href must never navigate the window: that is only for us to decide.
+  function linkAt(e: MouseEvent): Element | null {
+    const el = (e.target as Element).closest("[href]");
+    return el && root.contains(el) ? el : null;
+  }
+
+  function onAuxClick(e: MouseEvent) {
+    if (linkAt(e)) e.preventDefault();
+  }
+
   function onClick(e: MouseEvent) {
-    const a = (e.target as Element).closest("a");
-    if (!a || !root.contains(a)) return;
+    const el = linkAt(e);
+    if (!el) return;
     e.preventDefault();
-    const action = classifyLink(a.getAttribute("href") ?? "", path);
+    if (el.tagName !== "A") return;
+    const action = classifyLink(el.getAttribute("href") ?? "", path);
     switch (action.kind) {
       case "anchor":
         [...root.querySelectorAll("[id]")].find((el) => el.id === action.id)?.scrollIntoView({ block: "start" });
@@ -67,7 +79,7 @@
 
 <!-- Focusable so the keyboard can scroll it; links inside are natively keyboard operable. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->
-<div class="md" bind:this={root} onclick={onClick} role="document" tabindex="0"></div>
+<div class="md" bind:this={root} onclick={onClick} onauxclick={onAuxClick} role="document" tabindex="0"></div>
 
 <style>
   .md {

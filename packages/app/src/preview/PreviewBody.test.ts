@@ -10,6 +10,7 @@ vi.mock("../terminal/links.js", () => ({ openExternalLink: vi.fn() }));
 
 import { openExternalLink } from "../terminal/links.js";
 import { toasts } from "../stores/app.js";
+import { filePreviewImage } from "../ipc/client.js";
 import PreviewBody from "./PreviewBody.svelte";
 
 const DOC = "D:\\code\\api\\README.md";
@@ -82,6 +83,33 @@ describe("PreviewBody", () => {
   it("colours fenced code by language", async () => {
     await show("```ts\nconst a = 1;\n```");
     await vi.waitFor(() => expect(host.querySelector("pre code .hljs-keyword")).not.toBeNull());
+  });
+
+  it("lets nothing with an href navigate the window, not even an image-map area", async () => {
+    const onNavigate = await show("text");
+    host.querySelector(".md")!.insertAdjacentHTML("beforeend", '<map name="m"><area href="https://evil.example/" shape="rect" coords="0,0,9,9"></map>');
+    const e = click(host.querySelector("area")!);
+    expect(e.defaultPrevented).toBe(true);
+    expect(openExternalLink).not.toHaveBeenCalled();
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("does not let a middle click on a link open anything", async () => {
+    await show("[site](https://example.com)");
+    const e = new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 });
+    host.querySelector("a")!.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("shows the text before the images have loaded", async () => {
+    let release: (b: Uint8Array) => void = () => {};
+    vi.mocked(filePreviewImage).mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    await show("# Title\n\n![a](img/a.png)");
+    const img = host.querySelector("img")!;
+    expect(host.querySelector("h1")?.textContent).toBe("Title");
+    expect(img.hasAttribute("src")).toBe(false);
+    release(new Uint8Array([1, 2, 3]));
+    await vi.waitFor(() => expect(img.getAttribute("src")).toBe("data:image/png;base64,AQID"));
   });
 
   it("shows a local image as a data URL and replaces a remote one", async () => {

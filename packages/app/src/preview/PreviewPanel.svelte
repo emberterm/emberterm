@@ -41,7 +41,8 @@
       const r = await filePreview(p);
       if (p !== path) return; // another file was opened meanwhile
       note = null;
-      doc = { text: r.text, path: r.path };
+      // A touch or a save with the same text must not re-parse, re-highlight and re-read images.
+      if (doc?.text !== r.text) doc = { text: r.text, path: r.path };
       setPreviewSize(untrack(() => tabId), r.size);
     } catch (e) {
       if (p === path) note = previewErrorMessage(e);

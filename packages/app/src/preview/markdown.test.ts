@@ -22,13 +22,28 @@ describe("renderMarkdown sanitizing", () => {
     ["a form", '<form action="https://evil.example"><button>go</button></form>'],
     ["an entity-encoded javascript: link", '<a href="&#106;avascript:alert(1)">x</a>'],
     ["a mailto link", "[x](mailto:a@b.c)"],
+    ["an image map", '<img src="a.png" usemap="#m"><map name="m"><area shape="rect" coords="0,0,9999,9999" href="https://evil.example/"></map>'],
+    ["a picture source", '<picture><source srcset="https://evil.example/x.png"><img src="a.png"></picture>'],
+    ["an img srcset", '<img src="a.png" srcset="https://evil.example/x.png 2x">'],
+    ["a video", '<video src="https://evil.example/v.mp4" poster="https://evil.example/p.png" autoplay></video>'],
+    ["an audio", '<audio src="https://evil.example/a.mp3" autoplay></audio>'],
+    ["an svg image", '<svg><image href="https://evil.example/x.png"/></svg>'],
+    ["a table background", '<table background="https://evil.example/x"><tr><td>x</td></tr></table>'],
+    ["form controls", "<button>b</button><textarea>t</textarea><select><option>o</option></select>"],
   ];
 
   it.each(hostile)("removes %s", async (_name, src) => {
     const { html } = await render(src);
-    for (const bad of ["onerror", "javascript:", "<script", "<style", "<iframe", "<form", "data:text/html", "style=", "mailto:"]) {
+    for (const bad of ["onerror", "javascript:", "<script", "<style", "<iframe", "<form", "data:text/html", "style=", "mailto:",
+      "<area", "<map", "usemap", "srcset", "<source", "<video", "<audio", "poster", "<svg", "<image", "background=",
+      "<button", "<textarea", "<select"]) {
       expect(html.toLowerCase()).not.toContain(bad);
     }
+  });
+
+  it("keeps the img of a picture element, which is the part that works", async () => {
+    const { root } = await render('<picture><source srcset="dark.png"><img src="light.png" alt="logo"></picture>');
+    expect(root.querySelector("img")?.getAttribute("src")).toBe("light.png");
   });
 
   it("keeps only disabled checkboxes among inputs", async () => {

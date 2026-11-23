@@ -9,6 +9,9 @@ const MIME: Record<string, string> = {
   svg: "image/svg+xml",
 };
 
+/** Where a local image's path waits until it is read; the img has no `src` meanwhile. */
+const PENDING = "data-pending-src";
+
 /** `data:` URL for an image; the CSP allows `data:` images but not blob: or file: ones. */
 export function bytesToDataUrl(bytes: Uint8Array, ext: string): string {
   const mime = MIME[ext.toLowerCase()] ?? "application/octet-stream";
@@ -20,7 +23,7 @@ export function bytesToDataUrl(bytes: Uint8Array, ext: string): string {
   return `data:${mime};base64,${btoa(binary)}`;
 }
 
-/** How many bytes of images one document may still load. */
+/** How many bytes of images one document may still load. Once one does not fit, nothing more is read. */
 export class ImageBudget {
   private left: number;
   constructor(maxBytes = 20 * 1024 * 1024) {
@@ -30,7 +33,10 @@ export class ImageBudget {
     return this.left;
   }
   take(bytes: number): boolean {
-    if (bytes > this.left) return false;
+    if (bytes > this.left) {
+      this.left = 0;
+      return false;
+    }
     this.left -= bytes;
     return true;
   }
@@ -48,16 +54,11 @@ function extension(src: string): string {
 }
 
 /**
- * Makes the images of a rendered document safe to show: remote ones are replaced by a note,
- * relative ones are read from disk (allowed types only, within `budget`) and inlined as data
- * URLs. Runs one image at a time so the budget is spent in document order.
+ * First pass, synchronous: remote images become a note, images that cannot be shown become a
+ * note, and local ones lose their `src` so the webview does not request them from its own
+ * origin. The document can be shown right after this; `loadImages` fills the rest in.
  */
-export async function enhanceImages(
-  root: ParentNode,
-  docPath: string,
-  load: (path: string) => Promise<Uint8Array>,
-  budget: ImageBudget,
-): Promise<void> {
+export function deferImages(root: ParentNode): void {
   for (const img of [...root.querySelectorAll("img")]) {
     const src = img.getAttribute("src") ?? "";
     const alt = img.getAttribute("alt") ?? "";
@@ -65,19 +66,69 @@ export async function enhanceImages(
     if (src.startsWith("data:")) continue;
     if (/^(https?:)?\/\//i.test(src)) {
       img.replaceWith(placeholder(doc, `Remote image blocked: ${alt}`));
-      continue;
-    }
-    const ext = extension(src);
-    if (!src || !(ext in MIME) || budget.remaining <= 0) {
+    } else if (!src || !(extension(src) in MIME)) {
       img.replaceWith(placeholder(doc, `Image not shown: ${alt || src}`));
-      continue;
-    }
-    try {
-      const bytes = await load(resolveRelative(docPath, src));
-      if (!budget.take(bytes.length)) throw new Error("image budget spent");
-      img.setAttribute("src", bytesToDataUrl(bytes, ext));
-    } catch {
-      img.replaceWith(placeholder(doc, `Image not shown: ${alt || src}`));
+    } else {
+      img.removeAttribute("src");
+      img.setAttribute(PENDING, src);
     }
   }
+}
+
+/** Reads one local image as a data URL; null if it is refused, fails to read, or does not fit. */
+async function read(
+  path: string,
+  load: (path: string) => Promise<Uint8Array>,
+  budget: ImageBudget,
+): Promise<string | null> {
+  if (budget.remaining <= 0) return null;
+  try {
+    const bytes = await load(path);
+    return budget.take(bytes.length) ? bytesToDataUrl(bytes, extension(path)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Second pass: reads the images `deferImages` set aside, one at a time and in document order, within
+ * `budget`. An image used several times is read once. `isCancelled` is checked before each read and
+ * after it, so a render that was replaced stops costing IO.
+ */
+export async function loadImages(
+  root: ParentNode,
+  docPath: string,
+  load: (path: string) => Promise<Uint8Array>,
+  budget: ImageBudget,
+  isCancelled: () => boolean = () => false,
+): Promise<void> {
+  const cache = new Map<string, string | null>();
+  for (const img of [...root.querySelectorAll(`img[${PENDING}]`)]) {
+    if (isCancelled()) return;
+    const src = img.getAttribute(PENDING) ?? "";
+    const path = resolveRelative(docPath, src);
+    let url = cache.get(path);
+    if (url === undefined) {
+      url = await read(path, load, budget);
+      if (isCancelled()) return;
+      cache.set(path, url);
+    }
+    if (url) {
+      img.setAttribute("src", url);
+      img.removeAttribute(PENDING);
+    } else {
+      img.replaceWith(placeholder(img.ownerDocument, `Image not shown: ${img.getAttribute("alt") || src}`));
+    }
+  }
+}
+
+/** Both passes at once, for a document that is not on screen yet. */
+export async function enhanceImages(
+  root: ParentNode,
+  docPath: string,
+  load: (path: string) => Promise<Uint8Array>,
+  budget: ImageBudget,
+): Promise<void> {
+  deferImages(root);
+  await loadImages(root, docPath, load, budget);
 }

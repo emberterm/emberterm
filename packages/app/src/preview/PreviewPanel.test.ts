@@ -79,6 +79,18 @@ describe("PreviewPanel", () => {
     await vi.waitFor(() => expect(heading()).toBe("Two"));
   });
 
+  it("does not render again when the file was touched but its text is the same", async () => {
+    vi.mocked(filePreview).mockResolvedValue(file("# One", 111));
+    open();
+    await vi.waitFor(() => expect(heading()).toBe("One"));
+    const before = host.querySelector("h1");
+    vi.mocked(filePreview).mockResolvedValue(file("# One", 222));
+    h.opts!.onChange(222);
+    await vi.waitFor(() => expect(filePreview).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(host.querySelector("h1")).toBe(before);
+  });
+
   it("keeps the last render when the file goes missing, and recovers when it returns", async () => {
     vi.mocked(filePreview).mockResolvedValue(file("# One", 111));
     open();

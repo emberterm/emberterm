@@ -1,5 +1,12 @@
 // A document from a cloned repo is untrusted input. These tags and attributes never reach the panel.
-const FORBID_TAGS = ["style", "script", "iframe", "form", "object", "embed"];
+const FORBID_TAGS = [
+  "style", "script", "iframe", "form", "object", "embed",
+  // Anything that loads or navigates by itself (image maps, media, inline SVG, srcset sources),
+  // and every form control: Markdown needs none of them, and the CSP should not be the only wall.
+  "map", "area", "source", "track", "video", "audio", "svg", "image", "math", "canvas",
+  "button", "textarea", "select", "option", "optgroup", "datalist", "fieldset", "link", "meta", "base",
+];
+const FORBID_ATTR = ["style", "srcset", "sizes", "poster", "background", "usemap", "formaction", "ping"];
 // http, https, "#anchor" and relative URLs only. (`data:` on an <img> is allowed separately by DOMPurify.)
 const ALLOWED_URI = /^(?:https?:|#|[^a-z]|[a-z+.-]+(?:[^a-z+.:-]|$))/i;
 
@@ -13,7 +20,7 @@ export async function renderMarkdown(source: string): Promise<DocumentFragment> 
   const fragment = DOMPurify.sanitize(html, {
     RETURN_DOM_FRAGMENT: true,
     FORBID_TAGS,
-    FORBID_ATTR: ["style"],
+    FORBID_ATTR,
     ALLOW_DATA_ATTR: false,
     ALLOWED_URI_REGEXP: ALLOWED_URI,
   });
