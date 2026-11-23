@@ -2,11 +2,11 @@
 
 ## Overview
 
-EmberTerm is a lightweight Windows terminal for daily use: Tauri 2 (Rust) + Svelte 5 + xterm.js, built on `portable-pty`. Many tabs with different shells (Git Bash, WSL, pwsh, cmd), split panes, and the previous session restored on reopen. It replaces Tabby, which failed to launch after updates and forgot sessions.
+EmberTerm is a lightweight terminal for daily use, Windows first with a universal macOS build (ad-hoc signed, not notarized): Tauri 2 (Rust) + Svelte 5 + xterm.js, built on `portable-pty`. Many tabs with different shells (Git Bash, WSL, pwsh, cmd on Windows; the login shell on macOS), split panes, and the previous session restored on reopen: tabs, splits, folders and each pane's last commands. It replaces Tabby, which failed to launch after updates and forgot sessions.
 
 **Stack:**
-- Rust `1.85`: `tauri 2`, `portable-pty 0.9`, `serde`, `anyhow`/`thiserror`, `notify`, `tracing`, `sysinfo`, `fontdb`; Tauri plugins: opener, clipboard-manager (read), window-state, updater (no `zip` feature, see Cargo.toml), process
-- Frontend: Svelte 5 (runes), TypeScript, Vite 6, xterm.js 5 (fit, web-links, search addons); Markdown preview: marked, dompurify, highlight.js (all loaded on first use)
+- Rust `1.85`: `tauri 2`, `portable-pty 0.9`, `serde`, `anyhow`/`thiserror`, `notify`, `tracing`, `sysinfo`, `fontdb`; Tauri plugins: opener, clipboard-manager (read), window-state, updater (no `zip` feature, see Cargo.toml), process, dialog
+- Frontend: Svelte 5 (runes), TypeScript, Vite 6, xterm.js 5 (fit, web-links, search, webgl addons); Markdown preview: marked, dompurify, highlight.js (all loaded on first use)
 - IPC: Tauri commands (frontend → Rust), a Tauri Channel for PTY output (raw bytes), and Tauri events (Rust → frontend)
 
 ---
@@ -31,19 +31,22 @@ The project is a **pnpm + Cargo workspace**:
 packages/desktop/src/
   main.rs                ← Tauri entry, plugins, AppState registration
   state.rs               ← AppState (sessions, config, profiles, startup warnings), lock_or_recover
-  ipc.rs                 ← all #[tauri::command] handlers
+  ipc.rs                 ← most #[tauri::command] handlers (font_list is in fonts.rs, the preview commands in preview.rs)
   fonts.rs               ← font_list: installed font families (fontdb), for the font picker
   fsutil.rs              ← write_atomic, quarantine, load_user_file, StartupWarning
+  git.rs                 ← the git command for the status bar (no fsmonitor, no locks, no console flash) and safe_cwd (never a network path)
   profile.rs             ← Profile TOML + loading (broken files are quarantined)
   config.rs              ← Config TOML + loading; save_to refuses to overwrite a broken file
-  session_store.rs       ← session.json (tabs, splits, folders) load/save
+  session_store.rs       ← session.json (tabs, splits, folders, per-pane command history) load/save
   watcher.rs             ← notify watcher: config.toml / profiles hot-reload, app:warning
   preview.rs             ← Markdown preview commands: file_preview (1 MB), file_preview_image (5 MB), file_preview_stat, preview_resolve; PreviewError
-  preview_path.rs        ← shell path → Windows path (Git Bash /d/x, WSL /mnt and \wsl.localhost, pwsh); refuses network paths
+  preview_path.rs        ← shell path → Windows path (Git Bash /d/x, WSL /mnt and \\wsl.localhost, pwsh); refuses network paths
   terminal/
     pty.rs               ← spawn_session(): reader thread, DEC 2026 coalescing, Channel send, exit wait thread
+    output.rs            ← batches PTY output (8 ms or 64 KB) so a flood is not bound by per-send IPC cost
+    flow.rs              ← ack-based flow control: the reader waits while too many sent bytes are unacked (session_ack)
     session.rs           ← Session struct (PTY master, writer, pid)
-    shell_hooks.rs       ← per-shell hook injection: OSC 7 folder + OSC 133 busy marks (Bash/WSL/pwsh), folder restore
+    shell_hooks.rs       ← per-shell hook injection: OSC 7 folder, OSC 133 busy marks and OSC 133;E command marks (Bash/WSL/pwsh), folder and history restore
     busy.rs              ← process-tree "is a program running" check (cmd, pwsh)
     which.rs             ← PATH lookup, cached default shell
     events.rs            ← SessionExitPayload
@@ -63,6 +66,8 @@ packages/app/src/
     spawnPane.ts         ← starts a PTY session, wires output + background-tab indicators
     confirmClose.ts      ← whether closing a tab needs a confirmation
     closeWindow.ts       ← quit after the last tab closes
+    duplicateTab.ts      ← where a duplicated tab goes (right after its source)
+    nonces.ts            ← per-session secret that authenticates OSC 133;E command marks
     previewActions.ts    ← open the preview: from a path in the output, the file dialog, the palette/shortcut, or a cat command (opt-in)
   terminal/
     Grid.svelte          ← xterm.js Terminal per session; OSC 7/133/52, title, bell, find, context menu
@@ -70,16 +75,22 @@ packages/app/src/
     FindBar.svelte, TermMenu.svelte   ← scrollback search, right-click menu
     termKeys.ts          ← copy / paste / find key chords
     outputSink.ts        ← per-session byte sink (buffers until Grid attaches)
+    webglRenderer.ts     ← WebGL only while the tab is shown (the webview allows ~16 contexts); DOM renderer otherwise
+    links.ts             ← http(s) links go through the opener plugin, nothing else
     previewLinks.ts      ← xterm link provider: Ctrl+click on a .md name in the output
   utils/
     osc.ts               ← parseOsc7, parseOsc52, parseOsc133
     shortcuts.ts         ← window-level shortcuts: single source for the key handler and Keymap page
     tabLabel.ts, fontFamily.ts, clock.ts, bell.ts, warnings.ts
+    history.ts           ← which commands are kept for restore (10 per pane, no leading space, no secret-looking text)
+    menuPosition.ts, portal.ts   ← context menus stay on screen and paint above the status bar
     updater.ts           ← check → download → install → relaunch state machine
   chrome/
     TitleBar.svelte, TabStrip.svelte, ProfileMenu.svelte, StatusBar.svelte, Toasts.svelte, ConfirmDialog.svelte
-  palette/CommandPalette.svelte ← Ctrl+Shift+P: tabs, profiles, splits, themes
-  settings/              ← SettingsPanel, Appearance/Terminal/Keymap/About, ThemeEditor, ProfileEditor
+    TabMenu.svelte       ← tab right-click menu: duplicate, move, close (rename is a double-click on the title)
+    tabDrop.ts           ← drag-to-reorder: which half of a tab the pointer is over decides before/after
+  palette/CommandPalette.svelte ← Ctrl+Shift+P: tabs, profiles, splits, themes, Preview Markdown file
+  settings/              ← SettingsPanel, Appearance/Terminal/Keymap/About, ThemeEditor, ProfileEditor, NumberStepper
   welcome/WelcomeScreen.svelte  ← first-launch onboarding
   preview/               ← Markdown preview panel (lazy chunk): PreviewColumn/Panel/Body/Divider.svelte; markdown.ts (marked + DOMPurify → sanitized fragment),
                            links.ts, images.ts, slug.ts, highlight.ts (highlight.js subset), poller.ts (live reload), catCommand.ts, previewState.ts, layout.ts, format.ts, errors.ts
@@ -102,6 +113,8 @@ portable-pty ──► reader thread ──► DEC 2026 coalescing ──► Cha
 tabs store ──(500 ms debounce)──► session_save ──► session.json
 startup    ──► session_load ──► session_create(profile, cwd, channel) per pane
 ```
+
+Output is batched in `terminal/output.rs` and acknowledged: xterm reports each parsed batch with `sessionAck`, and `terminal/flow.rs` stops the reader while too many bytes are unacked, so a flood cannot grow memory. The prompt hook also sends `OSC 133;E;<nonce>;<command>` for each command: `Grid.svelte` hands it to `onCommand`, `pushPaneCommand` keeps the last 10 per pane, `session.json` saves them, and a restored shell is seeded with them (Up recalls them). The same mark is what the opt-in Markdown-preview-on-`cat` setting reads.
 
 Closing a tab asks first when `paneBusy` says a command is running; shells without markers (cmd, pwsh) fall back to `session_busy`, the process-tree check. Closing the last tab, or a shell exiting in it, closes the window.
 
@@ -199,10 +212,11 @@ Closing a tab asks first when `paneBusy` says a command is running; shells witho
 
 | Function | Returns | Notes |
 |---|---|---|
-| `sessionCreate({ profileId?, cwd?, onOutput })` | `Promise<string>` | output arrives as raw bytes on a Channel |
+| `sessionCreate({ profileId?, cwd?, history?, nonce?, onOutput })` | `Promise<string>` | output arrives as raw bytes on a Channel; `history` seeds the new shell, `nonce` authenticates its command marks |
 | `sessionWrite(id, bytes)` | `Promise<void>` | |
 | `sessionResize(id, cols, rows)` | `Promise<void>` | |
 | `sessionClose(id)` | `Promise<void>` | |
+| `sessionAck(id, bytes)` | `Promise<void>` | xterm parsed this many more bytes; the reader waits on it under a flood |
 | `sessionBusy(id)` | `Promise<boolean>` | child process running under the shell (fallback when no OSC 133) |
 | `sessionLoad()` | `Promise<{ session, warning }>` | reads `session.json` |
 | `sessionSave(session)` | `Promise<void>` | atomic write |
@@ -215,7 +229,7 @@ Closing a tab asks first when `paneBusy` says a command is running; shells witho
 | `filePreview(path)` / `filePreviewImage(path)` / `filePreviewStat(path)` | `FilePreview` / `Uint8Array` / `number` (mtime ms) | Markdown preview; rejects with `PreviewError { code }` |
 | `previewResolve({ profileId?, cwd, raw })` | `Promise<string>` | a path from a pane → Windows path, by that pane's shell and folder |
 
-Plugins are called through their own JS packages (not `ipc/client.ts`): clipboard read for paste, updater and process for About → Check for updates, opener for external links. Each needs a permission in `capabilities/default.json`.
+Plugins are called through their own JS packages (not `ipc/client.ts`): clipboard read for paste, updater and process for About → Check for updates, opener for external links, dialog for the file pickers (a profile's folder, Preview Markdown file). Each needs a permission in `capabilities/default.json`.
 
 ### Tauri Events (Rust → frontend)
 
@@ -241,14 +255,19 @@ Folder, busy state, title, bell and clipboard come from xterm.js handlers (`util
 - Svelte reactivity trap: props that resolve through the `$tabs` store re-run any effect that reads them; read them with `untrack` or through a `$derived`
 - xterm swallows Tab and Ctrl+V; terminal-scoped keys are handled in `Grid.svelte`'s custom key handler, window-level ones in `utils/shortcuts.ts`
 - The Markdown preview is a column next to a stable `.terminals` wrapper in `TabPane.svelte`: the terminals must never remount (they would lose their scrollback) when it opens or closes. Its state (`Tab.preview`) is not saved in `session.json`
-- Markdown from a file is untrusted: it only becomes DOM through `renderMarkdown` (DOMPurify, returns a fragment, no `{@html}`), remote images are replaced by a note, and the CSP is unchanged. Terminal output can forge paths and folders, so `preview.rs` and `preview_path.rs` never read a network path (SMB auth leaks the NTLM hash) except `\wsl.localhost\`
+- Markdown from a file is untrusted: it only becomes DOM through `renderMarkdown` (DOMPurify, returns a fragment, no `{@html}`), remote images are replaced by a note, and the CSP is unchanged. Terminal output can forge paths and folders, so `preview.rs` and `preview_path.rs` never read a network path (SMB auth leaks the NTLM hash) except `\\wsl.localhost\`
+- Tab panes hide with `visibility: hidden`, never `display: none`: xterm's ResizeObserver would measure 0-width cells and corrupt full-screen programs. WebGL is attached only to the tab that is shown
+- Command history rides on the hook's `OSC 133;E` mark (percent-encoded, with the session nonce, so a mark a program printed itself is ignored). `utils/history.ts` drops commands that start with a space, span lines, or look like secrets
+- `session.json` and `config.toml` grow additively with `#[serde(default)]`, so `version` stays 1 and old files still load
+- Programs cannot set the clipboard (OSC 52) unless `behavior.osc52_clipboard` is on; Markdown preview on `cat` is `behavior.preview_on_cat`, also off by default
+- `[profile.release]` in `packages/desktop/Cargo.toml` is ignored by Cargo (profiles belong in the workspace root `Cargo.toml`), so release builds currently use the defaults
 - Git Bash orphans child processes (MSYS), so the process tree cannot show a running command there; that is why bash/WSL announce it with OSC 133
 
 ---
 
 ## Versioning and Releases
 
-One version everywhere: `packages/desktop/Cargo.toml` is the source (`tauri.conf.json` has no `version`), and the package.json files must match. `pnpm version:set X.Y.Z` writes them all and refreshes `Cargo.lock`; `pnpm version:check` verifies (CI runs it). To release: bump in a PR (and move `[Unreleased]` in `CHANGELOG.md` under `## [X.Y.Z] - date`), merge, push tag `vX.Y.Z`. `scripts/release-notes.mjs` builds the release body from that section (`### Highlights`, Changes = Added/Changed/Removed, Fixes = Fixed/Security) plus the pull requests and contributors since the previous stable tag, and fails a stable tag without Highlights (tests: `node --test scripts/release-notes.test.mjs`); a tag with a suffix (`-rc.1`) is published as a pre-release. `.github/workflows/release.yml` checks the tag against the files, builds the signed Windows installer and a universal macOS app (ad-hoc signed, not notarized; one job at a time so `latest.json` keeps both platforms) and publishes `latest.json` for the in-app updater. The signing key is the repo secret `TAURI_SIGNING_PRIVATE_KEY` (local copy `~/.tauri/emberterm.key`; the public key is in `tauri.conf.json`). See CONTRIBUTING.md.
+One version everywhere: `packages/desktop/Cargo.toml` is the source (`tauri.conf.json` has no `version`), and the package.json files must match. `pnpm version:set X.Y.Z` writes them all and refreshes `Cargo.lock`; `pnpm version:check` verifies (CI runs it). To release: bump in a PR (and move `[Unreleased]` in `CHANGELOG.md` under `## [X.Y.Z] - date`), merge, push tag `vX.Y.Z`. `scripts/release-notes.mjs` builds the release body from that section (`### Highlights`, Changes = Added/Changed/Removed, Fixes = Fixed/Security) plus the pull requests and contributors since the previous stable tag, and fails a stable tag without Highlights (tests: `node --test scripts/release-notes.test.mjs`); a tag with a suffix (`-rc.1`) is published as a pre-release. `.github/workflows/release.yml` checks the tag against the files, builds the signed Windows installer and a universal macOS app (ad-hoc signed, not notarized; one job at a time so `latest.json` keeps both platforms) and publishes `latest.json` for the in-app updater. Assets: `-setup.exe` and `.msi` (Windows), universal `.dmg` and `.app.tar.gz` (macOS). The signing key is the repo secret `TAURI_SIGNING_PRIVATE_KEY` (local copy `~/.tauri/emberterm.key`; the public key is in `tauri.conf.json`). See CONTRIBUTING.md.
 
 ---
 
@@ -307,3 +326,15 @@ Custom slash commands (defined in `.claude/commands/`):
 - `/build` — full frontend + Rust build
 - `/lint` — clippy + fmt check + svelte-check
 - `/ci` — everything CI runs (fmt, clippy, tests, build, version check); required before a PR or marking a draft ready
+
+A `PostToolUse` hook (`.claude/hooks/post-edit-check.sh`) type-checks the file you just edited: `cargo check` for `.rs`, `pnpm turbo check` for `.ts` and `.svelte`; it reports only when the check fails.
+
+### Driving the running app
+
+To test a UI change in the real window, start the dev app with the WebView2 debug port and attach over the Chrome DevTools Protocol (a small Node script with the built-in `WebSocket` is enough):
+
+```bash
+WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 pnpm dev   # then http://127.0.0.1:9222/json
+```
+
+The installed app shares `%APPDATA%\ember` (config, profiles, `session.json`): close it and back that folder up first, and restore it afterwards. `cargo tauri dev` can also rewrite the line endings of `packages/desktop/Cargo.toml`; `git checkout` it. Keep screenshots free of your user and machine name (use a custom `PS1` and a folder under `~`).

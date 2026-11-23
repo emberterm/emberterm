@@ -14,9 +14,11 @@ Steps:
 For each step, report:
 - Pass (no output) or Fail (first 30 lines of output)
 
-4. Check for files exceeding 300 lines (excluding test-only files):
-   `find packages/desktop/src packages/app/src packages/ui/src -name "*.rs" -o -name "*.svelte" -o -name "*.ts" | xargs wc -l | sort -rn | awk '$1 > 300 && $2 != "total"'`
-   — list any over-long files and suggest how to split them
+4. Check for files exceeding 300 lines (test files are excluded):
+   `find packages/desktop/src packages/app/src packages/ui/src \( -name "*.rs" -o -name "*.svelte" -o -name "*.ts" \) ! -name "*_test.rs" ! -name "*.test.ts" | xargs wc -l | sort -rn | awk '$1 > 300 && $2 != "total"'`
+   — list any over-long files and suggest how to split them. A few files were already over the limit
+   (today `ipc.rs`, `SettingsPanel`, `CommandPalette`, `WelcomeScreen`, `TabStrip`, `App` and `Grid`): report them, but do
+   not split them inside an unrelated change.
 
 If any step fails, identify the root cause and offer to fix it.
 Auto-format Rust only if the user confirms: `cargo fmt --manifest-path packages/desktop/Cargo.toml`

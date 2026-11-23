@@ -1,39 +1,50 @@
 #!/usr/bin/env bash
-# Post-edit hook: run a fast type-check on the modified file.
-# Runs after every Edit or Write tool use.
-# Exit 0 always — this is informational, never blocking.
+# PostToolUse hook for Edit|Write: type-check the file that was just changed.
+#
+# Claude Code passes the tool call as JSON on stdin (tool_input.file_path). The hook is silent when
+# the check passes. When it fails it prints the errors to stderr and exits 2, which shows them to
+# Claude; the edit has already happened and is never undone.
 
-# Parse file_path from the tool input JSON
-FILE=$(node -e "
-  try {
-    const d = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}');
-    process.stdout.write(d.file_path || '');
-  } catch(e) {
-    process.stdout.write('');
-  }
-" 2>/dev/null)
+cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 
-if [[ -z "$FILE" ]]; then
-  exit 0
-fi
+FILE=$(node -e '
+  let input = "";
+  process.stdin.on("data", (chunk) => (input += chunk));
+  process.stdin.on("end", () => {
+    try { process.stdout.write(JSON.parse(input).tool_input?.file_path ?? ""); } catch {}
+  });
+' 2>/dev/null)
+
+[[ -z "$FILE" ]] && exit 0
 
 # Normalise to forward slashes for matching
-FILE_NORM="${FILE//\\//}"
+FILE="${FILE//\\//}"
 
-if [[ "$FILE_NORM" == *.rs ]]; then
-  echo "┌─ cargo check ─────────────────────────────"
-  cargo check --manifest-path packages/desktop/Cargo.toml 2>&1 \
-    | grep -E "^error|^warning\[|^  -->" \
-    | head -30
-  echo "└──────────────────────────────────────────"
+# Build output, scratch files and tooling config are not worth a type-check.
+case "$FILE" in
+  */node_modules/* | */target/* | */dist/* | */tmp/* | */.claude/* | */.superpowers/*) exit 0 ;;
+esac
 
-elif [[ "$FILE_NORM" == *.svelte ]] || [[ "$FILE_NORM" == *.ts ]]; then
-  echo "┌─ svelte-check ────────────────────────────"
-  pnpm turbo check 2>&1 \
-    | grep -E "Error|Warning|error|warning" \
-    | grep -v "^>" \
-    | head -30
-  echo "└──────────────────────────────────────────"
-fi
+# Runs a check; on failure shows the relevant lines (or the tail) to Claude.
+run_check() {
+  local label="$1"
+  shift
+  local out
+  if out=$("$@" 2>&1); then
+    return 0
+  fi
+  {
+    echo "$label failed after editing $FILE:"
+    local lines
+    lines=$(printf '%s\n' "$out" | grep -E '^(error|warning)|-->|Error|ERROR|error TS' | head -30)
+    if [[ -n "$lines" ]]; then printf '%s\n' "$lines"; else printf '%s\n' "$out" | tail -20; fi
+  } >&2
+  exit 2
+}
+
+case "$FILE" in
+  *.rs) run_check "cargo check" cargo check --manifest-path packages/desktop/Cargo.toml ;;
+  *.svelte | *.ts) run_check "svelte-check" pnpm turbo check ;;
+esac
 
 exit 0
