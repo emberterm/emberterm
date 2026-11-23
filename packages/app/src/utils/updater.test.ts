@@ -42,10 +42,12 @@ function setup(opts: {
 } = {}) {
   const queue = [...(opts.updates ?? [fakeUpdate()])];
   const calls: string[] = [];
+  const relaunchError = { current: opts.relaunchFail ?? (null as Error | null) };
   const relaunch = vi.fn(async () => {
     calls.push("relaunch");
-    if (opts.relaunchFail) throw opts.relaunchFail;
+    if (relaunchError.current) throw relaunchError.current;
   });
+  const notify = vi.fn();
   const fetchReleases = vi.fn(opts.releases ?? (async () => [rel("1.4.0"), rel("1.3.0"), rel("1.2.0")]));
   const updater = createUpdater({
     check: async () => {
@@ -56,6 +58,7 @@ function setup(opts: {
     relaunch,
     fetchReleases,
     countBusyTabs: opts.busy ?? (async () => 2),
+    notify,
   });
   const states: UpdateState[] = [];
   updater.state.subscribe((s) => states.push(s));
@@ -66,7 +69,7 @@ function setup(opts: {
     if (s.kind !== "available") throw new Error(`expected available, got ${s.kind}`);
     return s;
   };
-  return { updater, calls, relaunch, fetchReleases, kinds, now, available };
+  return { updater, calls, relaunch, relaunchError, notify, fetchReleases, kinds, now, available };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -234,11 +237,55 @@ describe("createUpdater: installing", () => {
     expect(t.relaunch).toHaveBeenCalledTimes(1);
   });
 
-  it("turns a failed restart into an install error", async () => {
+  it("keeps a failed restart apart from a failed install, and retrying only restarts", async () => {
+    const update = fakeUpdate();
+    const t = setup({ updates: [update], relaunchFail: new Error("cannot restart") });
+    await t.updater.check();
+    await t.updater.install();
+    expect(t.now()).toEqual({
+      kind: "error", message: "cannot restart", step: "relaunch", version: "1.4.0", currentVersion: "1.2.0",
+    });
+    t.relaunchError.current = null;
+    await t.updater.install();
+    expect(update.download).toHaveBeenCalledTimes(1);
+    expect(update.install).toHaveBeenCalledTimes(1);
+    expect(t.relaunch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry the restart twice at once", async () => {
     const t = setup({ relaunchFail: new Error("cannot restart") });
     await t.updater.check();
     await t.updater.install();
-    expect(t.now()).toMatchObject({ kind: "error", step: "install", message: "cannot restart" });
+    t.relaunchError.current = null;
+    await Promise.all([t.updater.install(), t.updater.install()]);
+    expect(t.relaunch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createUpdater: telling the user when Settings may be closed", () => {
+  it("notifies when the install fails, so a failure while Settings is closed is not silent", async () => {
+    const t = setup({ updates: [fakeUpdate({ downloadFail: new Error("connection lost") })] });
+    await t.updater.check();
+    await t.updater.install();
+    expect(t.notify).toHaveBeenCalledTimes(1);
+    expect(t.notify).toHaveBeenCalledWith("Update failed: connection lost");
+  });
+
+  it("notifies, with the way out, when the update is installed but the restart failed", async () => {
+    const t = setup({ relaunchFail: new Error("cannot restart") });
+    await t.updater.check();
+    await t.updater.install();
+    expect(t.notify).toHaveBeenCalledWith("1.4.0 is installed. Restart EmberTerm to finish the update.");
+  });
+
+  it("does not notify for a failed check (the user is looking at About) or a successful install", async () => {
+    const failing = setup({ checkFail: new Error("offline") });
+    await failing.updater.check();
+    expect(failing.notify).not.toHaveBeenCalled();
+    const ok = setup();
+    await ok.updater.check();
+    await ok.updater.install();
+    expect(ok.notify).not.toHaveBeenCalled();
   });
 });
 

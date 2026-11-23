@@ -24,6 +24,9 @@ notify = "6"
 fontdb = "0.23"
 # Same features the updater already turns on, so no second TLS stack is built.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
+# reqwest has no crypto provider of its own here, and the updater installs one only inside its check.
+# Same version and features as the tree already has, so releases.rs can install it too.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tauri-plugin-opener = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-window-state = "2"

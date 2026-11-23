@@ -88,19 +88,36 @@ pub fn classify_status(status: u16, rate_remaining: Option<&str>) -> Option<Rele
     }
 }
 
+fn network_error(e: reqwest::Error) -> ReleasesError {
+    tracing::warn!(error = %e, "releases request failed");
+    ReleasesError::Network
+}
+
+/// reqwest (built without a provider of its own) panics when no process-wide crypto provider
+/// exists, and the updater plugin installs one only inside its own check. Install the same one
+/// here when it is missing, so this command works whether or not a check has run. An `Err` from
+/// `install_default` only means another thread installed it first.
+fn ensure_crypto_provider() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+}
+
+fn http_client() -> Result<reqwest::Client, ReleasesError> {
+    ensure_crypto_provider();
+    reqwest::Client::builder()
+        .timeout(TIMEOUT)
+        .user_agent(concat!("EmberTerm/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(network_error)
+}
+
 /// The releases list for the in-between notes of an update. Anonymous, with a generic User-Agent.
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn releases_fetch() -> Result<Vec<ReleaseNote>, ReleasesError> {
-    let network = |e: reqwest::Error| {
-        tracing::warn!(error = %e, "releases request failed");
-        ReleasesError::Network
-    };
-    let client = reqwest::Client::builder()
-        .timeout(TIMEOUT)
-        .user_agent(concat!("EmberTerm/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(network)?;
+    let network = network_error;
+    let client = http_client()?;
     let response = client
         .get(RELEASES_URL)
         .header("Accept", "application/vnd.github+json")

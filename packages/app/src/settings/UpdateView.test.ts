@@ -178,6 +178,12 @@ describe("UpdateView: installing", () => {
 });
 
 describe("UpdateView: where the card sits", () => {
+  it("moves focus to the card's title when an update appears, so a screen reader announces it", async () => {
+    show(available());
+    await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector(".title")));
+    expect(host.querySelector(".title")!.getAttribute("tabindex")).toBe("-1");
+  });
+
   it("brings the card into view when an update appears, so Install is not left below the fold", async () => {
     show(available());
     await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
@@ -217,6 +223,20 @@ describe("UpdateView: errors", () => {
     show({ kind: "error", step: "install", message: "The download failed.", currentVersion: "1.2.0" });
     expect(alert()).toContain("The download failed. Nothing was changed");
     expect(alert()).not.toContain("..");
+  });
+
+  it("says the update is installed when only the restart failed, and offers just the restart", () => {
+    show({ kind: "error", step: "relaunch", message: "cannot restart", version: "2.0.0", currentVersion: "1.2.0" });
+    const alert = host.querySelector('[role="alert"]')!.textContent!.replace(/\s+/g, " ");
+    expect(alert).toContain("2.0.0 is installed.");
+    expect(alert).toContain("Restart EmberTerm to finish the update.");
+    expect(alert).not.toContain("Nothing was changed");
+    expect(button("Try again")).toBeUndefined();
+    button("Restart EmberTerm")!.click();
+    expect(onInstall).toHaveBeenCalledTimes(1);
+    expect(onCheck).not.toHaveBeenCalled();
+    button("Dismiss")!.click();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
   it("retries the check after a failed check", () => {

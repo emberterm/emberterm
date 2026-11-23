@@ -33,10 +33,17 @@
   });
 
   let cardEl = $state<HTMLDivElement | undefined>();
+  let titleEl = $state<HTMLDivElement | undefined>();
   const kind = $derived(update.kind);
   // The About page has its header above the card, so without this Install can sit below the fold.
+  // Focus moves to the title too: the button that was clicked is gone, and a screen reader would
+  // otherwise hear nothing when the card replaces it.
   $effect(() => {
-    if (kind === "available" && cardEl) untrack(() => cardEl?.scrollIntoView({ block: "nearest" }));
+    if (kind !== "available" || !cardEl || !titleEl) return;
+    untrack(() => {
+      cardEl?.scrollIntoView({ block: "nearest" });
+      titleEl?.focus({ preventScroll: true });
+    });
   });
 
   // An error message may end without a full stop, and a sentence follows it.
@@ -58,7 +65,7 @@
 
 {#if update.kind === "available"}
   <div class="card" bind:this={cardEl}>
-    <div class="title">EmberTerm {update.version} is available</div>
+    <div class="title" tabindex="-1" bind:this={titleEl}>EmberTerm {update.version} is available</div>
     <div class="meta">{meta}</div>
     <div class="label">What's new since {update.currentVersion}</div>
     <ReleaseNotes entries={update.notes.entries} />
@@ -122,12 +129,20 @@
         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" /><path d="m9 9 6 6M15 9l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
       </svg>
       <span>
-        <b>Update failed.</b> {update.message}{stop(update.message)}
-        {#if update.step === "install"}Nothing was changed, and you are still on {update.currentVersion}.{/if}
+        {#if update.step === "relaunch"}
+          <b>{update.version} is installed.</b> Restart EmberTerm to finish the update. The restart failed: {update.message}{stop(update.message)}
+        {:else}
+          <b>Update failed.</b> {update.message}{stop(update.message)}
+          {#if update.step === "install"}Nothing was changed, and you are still on {update.currentVersion}.{/if}
+        {/if}
       </span>
     </div>
     <div class="actions">
-      <Btn variant="primary" onclick={update.step === "install" ? onInstall : onCheck}>Try again</Btn>
+      {#if update.step === "relaunch"}
+        <Btn variant="primary" onclick={onInstall}>Restart EmberTerm</Btn>
+      {:else}
+        <Btn variant="primary" onclick={update.step === "install" ? onInstall : onCheck}>Try again</Btn>
+      {/if}
       <Btn onclick={onDismiss}>Dismiss</Btn>
       <span class="spacer">{@render extlink(RELEASES, "Download it from GitHub")}</span>
     </div>
@@ -142,6 +157,7 @@
 <style>
   .card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; }
   .title { font-size: 15px; font-weight: 600; color: var(--fg); }
+  .title:focus { outline: none; }
   .meta { margin-top: -6px; font-size: 12px; color: var(--fg-muted); }
   .label { font-size: 12px; font-weight: 600; color: var(--fg-muted); }
   .loading { margin: 0; font-size: 12px; color: var(--fg-muted); }

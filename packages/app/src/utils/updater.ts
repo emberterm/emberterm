@@ -39,20 +39,24 @@ export type UpdateState =
     }
   | { kind: "downloading"; version: string; pct: number | null }
   | { kind: "installing"; version: string }
-  | { kind: "error"; message: string; step: "check" | "install"; currentVersion?: string };
+  | { kind: "error"; message: string; step: "check" | "install"; currentVersion?: string }
+  // The update is already on disk; only the restart failed, so retrying must not download again.
+  | { kind: "error"; message: string; step: "relaunch"; version: string; currentVersion: string };
 
 export interface UpdateDeps {
   check(): Promise<PluginUpdate | null>;
   relaunch(): Promise<void>;
   fetchReleases(): Promise<ReleaseNote[]>;
   countBusyTabs(): Promise<number>;
+  /** Tells the user something outside the About page (a toast), for failures while Settings is closed. */
+  notify?(message: string): void;
 }
 
 export interface Updater {
   state: Readable<UpdateState>;
   /** Looks for a newer release and stops at the card; it never installs. */
   check(): Promise<void>;
-  /** Downloads, installs and restarts. Only from the card, or to retry a failed install. */
+  /** Downloads, installs and restarts. Only from the card, or to retry a failed install or restart. */
   install(): Promise<void>;
   /** Closes the card (or an error). Not possible while a download is running. */
   dismiss(): Promise<void>;
@@ -128,12 +132,8 @@ export function createUpdater(deps: UpdateDeps): Updater {
     }
   }
 
-  async function install() {
-    const s = get(store);
-    const retry = s.kind === "error" && s.step === "install";
-    const update = handle;
-    if (!update || installing || (s.kind !== "available" && !retry)) return;
-    installing = true;
+  /** Downloads and installs; on failure shows the install error and returns false. */
+  async function downloadAndInstall(update: PluginUpdate): Promise<boolean> {
     const { version, currentVersion } = update;
     try {
       let total: number | undefined;
@@ -153,9 +153,34 @@ export function createUpdater(deps: UpdateDeps): Updater {
       });
       store.set({ kind: "installing", version });
       await update.install();
-      await deps.relaunch();
+      return true;
     } catch (e) {
       store.set({ kind: "error", message: message(e), step: "install", currentVersion });
+      deps.notify?.(`Update failed: ${message(e)}`);
+      return false;
+    }
+  }
+
+  async function restart(version: string, currentVersion: string) {
+    try {
+      await deps.relaunch();
+    } catch (e) {
+      store.set({ kind: "error", message: message(e), step: "relaunch", version, currentVersion });
+      deps.notify?.(`${version} is installed. Restart EmberTerm to finish the update.`);
+    }
+  }
+
+  async function install() {
+    const s = get(store);
+    const retryInstall = s.kind === "error" && s.step === "install";
+    const retryRestart = s.kind === "error" && s.step === "relaunch";
+    const update = handle;
+    if (!update || installing || (s.kind !== "available" && !retryInstall && !retryRestart)) return;
+    installing = true;
+    try {
+      // After a failed restart the update is already installed: only the restart is retried.
+      if (retryRestart) store.set({ kind: "installing", version: update.version });
+      if (retryRestart || (await downloadAndInstall(update))) await restart(update.version, update.currentVersion);
     } finally {
       installing = false;
     }

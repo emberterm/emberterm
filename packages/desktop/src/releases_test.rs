@@ -132,6 +132,13 @@ fn classifies_the_http_status() {
 }
 
 #[test]
+fn the_client_can_be_built_before_any_update_check_has_run() {
+    // reqwest is built without a crypto provider of its own and panics when no process-wide one
+    // exists; the updater plugin installs one only inside its own check.
+    assert!(http_client().is_ok());
+}
+
+#[test]
 fn errors_serialize_with_a_code() {
     assert_eq!(
         serde_json::to_value(ReleasesError::RateLimited).unwrap(),

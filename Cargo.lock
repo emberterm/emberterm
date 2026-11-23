@@ -921,6 +921,7 @@ dependencies = [
  "notify",
  "portable-pty",
  "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sysinfo",
