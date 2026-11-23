@@ -7,7 +7,8 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 import { open } from "@tauri-apps/plugin-dialog";
 import { filePreview, previewResolve } from "../ipc/client.js";
 import { tabs, toasts, addTab, setPaneCwd, openPreview } from "../stores/app.js";
-import { previewFromTerminal, previewFromDialog, togglePreview } from "./previewActions.js";
+import { terminalConfig } from "../stores/terminalConfigStore.js";
+import { previewFromTerminal, previewFromDialog, togglePreview, handlePaneCommand } from "./previewActions.js";
 
 const tab = () => get(tabs)[0];
 
@@ -81,5 +82,33 @@ describe("togglePreview", () => {
     vi.mocked(open).mockResolvedValue(null);
     await togglePreview();
     expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("handlePaneCommand", () => {
+  const setting = (on: boolean) => terminalConfig.update((c) => ({ ...c, previewOnCat: on }));
+
+  it("only records the command while the setting is off", () => {
+    setting(false);
+    handlePaneCommand("s1", "cat README.md");
+    expect(previewResolve).not.toHaveBeenCalled();
+    expect(tab().history).toEqual(["cat README.md"]);
+  });
+
+  it("opens the file of a cat command when the setting is on, and still records it", async () => {
+    setting(true);
+    vi.mocked(previewResolve).mockResolvedValue("D:/api/README.md");
+    vi.mocked(filePreview).mockResolvedValue({ path: "D:/api/README.md", text: "", size: 0, mtime_ms: 1 });
+    handlePaneCommand("s1", "cat README.md");
+    await vi.waitFor(() => expect(tab().preview?.history).toEqual(["D:/api/README.md"]));
+    expect(previewResolve).toHaveBeenCalledWith({ profileId: "git-bash", cwd: "/d/api", raw: "README.md" });
+    expect(tab().history).toEqual(["cat README.md"]);
+  });
+
+  it("ignores commands that only look like cat, even with the setting on", () => {
+    setting(true);
+    handlePaneCommand("s1", "cat a.md | head");
+    expect(previewResolve).not.toHaveBeenCalled();
+    setting(false);
   });
 });

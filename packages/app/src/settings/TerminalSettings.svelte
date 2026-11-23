@@ -28,6 +28,10 @@
     updateTerminalConfig({ osc52Clipboard: !$terminalConfig.osc52Clipboard }).catch(() => {});
   }
 
+  function togglePreviewOnCat() {
+    updateTerminalConfig({ previewOnCat: !$terminalConfig.previewOnCat }).catch(() => {});
+  }
+
   function toggleConfirmClose() {
     updateTerminalConfig({ confirmCloseRunning: !$terminalConfig.confirmCloseRunning }).catch(() => {});
   }
@@ -141,6 +145,19 @@
       </span>
       <span class="toggle-wrap">
         <input type="checkbox" class="toggle-input" checked={$terminalConfig.osc52Clipboard} readonly />
+        <span class="toggle-track" aria-hidden="true"></span>
+      </span>
+    </div>
+    <div class="toggle-row" role="button" tabindex="0"
+      onclick={togglePreviewOnCat}
+      onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); togglePreviewOnCat(); } }}
+    >
+      <span class="toggle-label">
+        <span class="toggle-title">Open Markdown in the preview when shown with cat</span>
+        <span class="toggle-hint">After a command like cat README.md finishes, show the file rendered next to the terminal. Works in Git Bash, WSL and PowerShell; a pipe, a glob or two files are ignored</span>
+      </span>
+      <span class="toggle-wrap">
+        <input type="checkbox" class="toggle-input" checked={$terminalConfig.previewOnCat} readonly />
         <span class="toggle-track" aria-hidden="true"></span>
       </span>
     </div>

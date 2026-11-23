@@ -12,6 +12,8 @@ export interface TerminalConfig {
   bellSound: boolean;
   /** Let a program set the clipboard with OSC 52 */
   osc52Clipboard: boolean;
+  /** Open a Markdown file in the preview when a cat-like command has shown it */
+  previewOnCat: boolean;
 }
 
 /** Defaults mirror config.rs defaults. */
@@ -23,6 +25,7 @@ const DEFAULTS: TerminalConfig = {
   confirmCloseRunning: true,
   bellSound: true,
   osc52Clipboard: false,
+  previewOnCat: false,
 };
 
 export const terminalConfig = writable<TerminalConfig>({ ...DEFAULTS });
@@ -41,6 +44,7 @@ export async function loadTerminalConfig(): Promise<void> {
         confirm_close_running?: boolean;
         bell_sound?: boolean;
         osc52_clipboard?: boolean;
+        preview_on_cat?: boolean;
       };
     };
     const a = cfg?.appearance;
@@ -53,6 +57,7 @@ export async function loadTerminalConfig(): Promise<void> {
       confirmCloseRunning: b?.confirm_close_running ?? DEFAULTS.confirmCloseRunning,
       bellSound: b?.bell_sound ?? DEFAULTS.bellSound,
       osc52Clipboard: b?.osc52_clipboard ?? DEFAULTS.osc52Clipboard,
+      previewOnCat: b?.preview_on_cat ?? DEFAULTS.previewOnCat,
     });
   } catch {
     // Keep defaults if config isn't available yet
@@ -78,6 +83,7 @@ export async function updateTerminalConfig(patch: Partial<TerminalConfig>): Prom
       confirm_close_running: updated.confirmCloseRunning,
       bell_sound: updated.bellSound,
       osc52_clipboard: updated.osc52Clipboard,
+      preview_on_cat: updated.previewOnCat,
     },
   });
 }

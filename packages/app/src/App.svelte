@@ -26,13 +26,13 @@
   import { pickProfile } from "./session/profiles.js";
   import { duplicateIndex } from "./session/duplicateTab.js";
   import { previewLabel } from "./preview/format.js";
-  import { togglePreview } from "./session/previewActions.js";
+  import { togglePreview, handlePaneCommand } from "./session/previewActions.js";
   import { toSnapshot, clampActiveTab, type SavedSession, type SavedTab } from "./stores/sessionSnapshot.js";
   import { onProfilesUpdated, onConfigUpdated, onAppWarning } from "./ipc/events.js";
   import {
     tabs, activeTab, activeCwd, activeShell,
     addTab, removeTab, activateTab, moveTab, setPaneCwd, setTabTitle,
-    pushPaneCommand, restoreTabHistory,
+    restoreTabHistory,
     setTabSplit, clearTabSplit, pushToast, restoreCustomTitle,
   } from "./stores/app.js";
 
@@ -285,7 +285,7 @@
           onResize={tab.isActive ? (c, r) => { termCols = c; termRows = r; } : undefined}
           onCloseSplit={() => closeSplitPane(tab.id)}
           onPaneCwd={setPaneCwd}
-          onPaneCommand={pushPaneCommand}
+          onPaneCommand={handlePaneCommand}
           onPaneTitle={handlePaneTitle}
         />
       {/each}

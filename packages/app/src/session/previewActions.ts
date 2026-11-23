@@ -1,7 +1,9 @@
 import { get } from "svelte/store";
 import { open } from "@tauri-apps/plugin-dialog";
 import { filePreview, previewResolve } from "../ipc/client.js";
-import { activeTab, closePreview, openPreview, paneContext, pushToast } from "../stores/app.js";
+import { activeTab, closePreview, openPreview, paneContext, pushPaneCommand, pushToast } from "../stores/app.js";
+import { terminalConfig } from "../stores/terminalConfigStore.js";
+import { parseCatCommand } from "../preview/catCommand.js";
 import { previewErrorMessage } from "../preview/errors.js";
 
 /** Shows `path` in a tab's panel, but only if it reads; a bad file is a toast, not an empty panel. */
@@ -48,4 +50,12 @@ export async function togglePreview(): Promise<void> {
   if (!tab) return;
   if (tab.preview) closePreview(tab.id);
   else await previewFromDialog();
+}
+
+/** A command a pane reported (OSC 133;E): keep it for history, and maybe show the file it printed. */
+export function handlePaneCommand(sessionId: string, cmd: string): void {
+  pushPaneCommand(sessionId, cmd);
+  if (!get(terminalConfig).previewOnCat) return;
+  const raw = parseCatCommand(cmd);
+  if (raw) void previewFromTerminal(sessionId, raw);
 }
