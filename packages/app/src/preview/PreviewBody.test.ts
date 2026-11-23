@@ -79,6 +79,11 @@ describe("PreviewBody", () => {
     expect(get(toasts).map((t) => t.message)).toEqual(["Only Markdown files open in the preview"]);
   });
 
+  it("colours fenced code by language", async () => {
+    await show("```ts\nconst a = 1;\n```");
+    await vi.waitFor(() => expect(host.querySelector("pre code .hljs-keyword")).not.toBeNull());
+  });
+
   it("shows a local image as a data URL and replaces a remote one", async () => {
     await show("![a](img/a.png)\n\n![r](https://example.com/r.png)");
     await vi.waitFor(() => expect(host.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AQID"));

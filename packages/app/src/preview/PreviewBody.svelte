@@ -7,6 +7,7 @@
   import { assignHeadingIds } from "./slug.js";
   import { enhanceImages, ImageBudget } from "./images.js";
   import { classifyLink } from "./links.js";
+  import { highlightFragment } from "./highlight.js";
 
   interface Props {
     text: string;
@@ -36,6 +37,7 @@
       // Images are read before the fragment is inserted: a relative src in the page would make
       // the webview request it from its own origin.
       await enhanceImages(fragment, p, filePreviewImage, new ImageBudget());
+      await highlightFragment(fragment);
       if (mine !== seq) return;
       const keep = renderedPath === p ? root.scrollTop : 0;
       root.replaceChildren(fragment);
@@ -97,5 +99,11 @@
   .md :global(img) { max-width: 100%; height: auto; }
   .md :global(input[type="checkbox"]) { margin-right: 6px; }
   .md :global(li:has(> input[type="checkbox"])) { list-style: none; margin-left: -1.2em; }
+  .md :global(.hljs-keyword), .md :global(.hljs-selector-tag) { color: var(--accent); }
+  .md :global(.hljs-string), .md :global(.hljs-addition) { color: var(--green); }
+  .md :global(.hljs-number), .md :global(.hljs-literal) { color: var(--yellow); }
+  .md :global(.hljs-comment), .md :global(.hljs-quote) { color: var(--fg-muted); }
+  .md :global(.hljs-title), .md :global(.hljs-built_in), .md :global(.hljs-attr) { color: var(--blue); }
+  .md :global(.hljs-deletion) { color: var(--red); }
   .md :global(.blocked-image) { display: inline-block; border: 1px dashed var(--border); border-radius: 4px; padding: 2px 8px; color: var(--fg-muted); font-size: 12px; }
 </style>
