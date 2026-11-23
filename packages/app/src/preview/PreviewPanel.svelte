@@ -1,11 +1,12 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { filePreview } from "../ipc/client.js";
+  import { filePreview, filePreviewStat } from "../ipc/client.js";
   import { closePreview, openPreview, previewBack, previewForward, setPreviewSize } from "../stores/app.js";
   import { canBack, canForward, previewPath, type PreviewState } from "./previewState.js";
   import { basename } from "./format.js";
   import { previewErrorMessage } from "./errors.js";
   import PreviewBody from "./PreviewBody.svelte";
+  import { createPoller } from "./poller.js";
 
   interface Props {
     tabId: string;
@@ -24,6 +25,28 @@
 
   let doc = $state<{ text: string; path: string } | null>(null);
   let error = $state<string | null>(null);
+  /** Something wrong with the file as it is now (gone, too big); the last render stays up. */
+  let note = $state<string | null>(null);
+  let focused = $state(document.hasFocus());
+
+  const poller = createPoller({
+    stat: () => filePreviewStat(path),
+    onChange: () => { void reload(); },
+    onMissing: () => { note = "File no longer exists"; },
+  });
+
+  async function reload() {
+    const p = path;
+    try {
+      const r = await filePreview(p);
+      if (p !== path) return; // another file was opened meanwhile
+      note = null;
+      doc = { text: r.text, path: r.path };
+      setPreviewSize(untrack(() => tabId), r.size);
+    } catch (e) {
+      if (p === path) note = previewErrorMessage(e);
+    }
+  }
 
   // A new file: clear the old one first so an error never sits on top of the previous document.
   $effect(() => {
@@ -31,20 +54,37 @@
     let cancelled = false;
     doc = null;
     error = null;
+    note = null;
+    poller.stop();
     filePreview(p)
       .then((r) => {
         if (cancelled) return;
         doc = { text: r.text, path: r.path };
         setPreviewSize(untrack(() => tabId), r.size);
+        poller.start(r.mtime_ms);
       })
       .catch((e: unknown) => {
         if (!cancelled) error = previewErrorMessage(e);
       });
     return () => { cancelled = true; };
   });
+
+  // Poll only for a tab you can see, in a window you are using.
+  $effect(() => { poller.setEnabled(active && focused); });
+  $effect(() => {
+    const on = () => { focused = true; };
+    const off = () => { focused = false; };
+    window.addEventListener("focus", on);
+    window.addEventListener("blur", off);
+    return () => {
+      window.removeEventListener("focus", on);
+      window.removeEventListener("blur", off);
+    };
+  });
+  $effect(() => () => poller.stop());
 </script>
 
-<section class="panel" class:inactive={!active}>
+<section class="panel">
   <header class="head">
     <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M6 3h8l5 5v13H6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
@@ -52,10 +92,16 @@
     </svg>
     <span class="name" title={path}>{name}</span>
     <span class="folder" title={folder}>{folder}</span>
+    {#if doc}
+      <span class="live" class:off={!!note} title={note ?? "Reloads when the file changes"}><span class="dot"></span>live</span>
+    {/if}
     <button class="btn" onclick={() => previewBack(tabId)} disabled={!back} aria-label="Back">‹</button>
     <button class="btn" onclick={() => previewForward(tabId)} disabled={!forward} aria-label="Forward">›</button>
     <button class="btn" onclick={() => closePreview(tabId)} aria-label="Close preview">×</button>
   </header>
+  {#if note}
+    <p class="note" role="status">{note}</p>
+  {/if}
   <div class="content">
     {#if doc}
       <PreviewBody text={doc.text} path={doc.path} onNavigate={(p) => openPreview(tabId, p)} />
@@ -89,6 +135,10 @@
   .icon { color: var(--accent); flex: none; }
   .name { font-weight: 500; white-space: nowrap; }
   .folder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-muted); }
+  .live { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--green); flex: none; }
+  .live.off { color: var(--fg-muted); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .note { margin: 0; padding: 4px 12px; font-size: 12px; color: var(--yellow); border-bottom: 1px solid var(--border); flex: none; }
   .btn {
     background: none;
     border: 0;
