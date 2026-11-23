@@ -168,6 +168,23 @@ export async function filePreviewStat(path: string): Promise<number> {
   return invoke("file_preview_stat", { path });
 }
 
+// ── Release notes ─────────────────────────────────────────────────────────────
+
+export interface ReleaseNote {
+  tag: string;
+  version: string;
+  published_at: string | null;
+  body: string;
+  url: string;
+}
+
+export type ReleasesErrorCode = "network" | "rate_limited" | "status" | "parse";
+
+/** Stable releases from GitHub, newest first (at most 30), for the in-between notes of an update. */
+export async function releasesFetch(): Promise<ReleaseNote[]> {
+  return invoke("releases_fetch");
+}
+
 /** Turns a path typed or printed in a pane into a Windows path, using that pane's shell and folder. */
 export async function previewResolve(opts: { profileId?: string; cwd: string; raw: string }): Promise<string> {
   return invoke("preview_resolve", { profileId: opts.profileId ?? null, cwd: opts.cwd, raw: opts.raw });

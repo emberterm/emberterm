@@ -920,6 +920,7 @@ dependencies = [
  "fontdb",
  "notify",
  "portable-pty",
+ "reqwest",
  "serde",
  "serde_json",
  "sysinfo",

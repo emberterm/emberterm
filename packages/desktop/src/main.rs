@@ -8,6 +8,7 @@ mod ipc;
 mod preview;
 mod preview_path;
 mod profile;
+mod releases;
 mod session_store;
 mod state;
 mod terminal;
@@ -67,6 +68,7 @@ fn main() {
             preview::file_preview_image,
             preview::file_preview_stat,
             preview::preview_resolve,
+            releases::releases_fetch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmberTerm");
