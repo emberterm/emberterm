@@ -30,7 +30,7 @@ tabs, splits, folders and your last commands. No account, no telemetry. It is bu
 - **Status bar:** shell, folder, git branch and changes, size, clock
 - **Safe defaults:** programs cannot set your clipboard unless you allow it, and the app runs under a strict Content Security Policy
 - **Window memory:** size, position and maximized state come back
-- **Updates:** Settings → About → Check for updates downloads and installs the latest release in one click
+- **Updates that ask first:** Settings → About → Check for updates shows what changed in every release since yours, and installs only when you click Install
 - **Robust files:** config, profiles and `session.json` hot-reload; a broken file is moved aside with a toast and never blocks startup
 
 ## Why EmberTerm
