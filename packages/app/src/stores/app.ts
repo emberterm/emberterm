@@ -1,5 +1,6 @@
 import { writable, derived, get } from "svelte/store";
 import { HISTORY_MAX, appendCommand, shouldRecord } from "../utils/history.js";
+import { openPath, goBack, goForward, withSize, type PreviewState } from "../preview/previewState.js";
 
 export interface Tab {
   id: string;
@@ -23,6 +24,8 @@ export interface Tab {
   splitProfileId?: string;
   splitCwd?: string;
   splitHistory?: string[];
+  /** The Markdown preview panel of this tab; not saved with the session. */
+  preview?: PreviewState;
 }
 
 export const tabs = writable<Tab[]>([]);
@@ -227,6 +230,39 @@ export function clearTabSplit(tabId: string) {
         : t,
     ),
   );
+}
+
+// ── Markdown preview ──────────────────────────────────────────────────────────
+
+/** Applies `fn` to one tab's preview; nothing is published when it returns the same value. */
+function patchPreview(tabId: string, fn: (p?: PreviewState) => PreviewState | undefined) {
+  updateTabsIfChanged((ts) => {
+    let changed = false;
+    const next = ts.map((t) => {
+      if (t.id !== tabId) return t;
+      const preview = fn(t.preview);
+      if (preview === t.preview) return t;
+      changed = true;
+      return { ...t, preview };
+    });
+    return changed ? next : null;
+  });
+}
+
+export const openPreview = (tabId: string, path: string) => patchPreview(tabId, (p) => openPath(p, path));
+export const closePreview = (tabId: string) => patchPreview(tabId, () => undefined);
+export const previewBack = (tabId: string) => patchPreview(tabId, (p) => (p ? goBack(p) : p));
+export const previewForward = (tabId: string) => patchPreview(tabId, (p) => (p ? goForward(p) : p));
+export const setPreviewSize = (tabId: string, size: number) =>
+  patchPreview(tabId, (p) => (p && p.size !== size ? withSize(p, size) : p));
+
+/** The tab, profile and folder behind a pane's session id (primary or split); null if unknown. */
+export function paneContext(sessionId: string): { tabId: string; profileId?: string; cwd?: string } | null {
+  const t = get(tabs).find((x) => x.sessionId === sessionId || x.splitSessionId === sessionId);
+  if (!t) return null;
+  return t.sessionId === sessionId
+    ? { tabId: t.id, profileId: t.profileId, cwd: t.cwd }
+    : { tabId: t.id, profileId: t.splitProfileId, cwd: t.splitCwd };
 }
 
 // ── Toasts ────────────────────────────────────────────────────────────────────

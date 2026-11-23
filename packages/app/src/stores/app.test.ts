@@ -20,6 +20,12 @@ import {
   moveTab,
   activeTab,
   activeCwd,
+  openPreview,
+  closePreview,
+  previewBack,
+  previewForward,
+  setPreviewSize,
+  paneContext,
 } from "./app.js";
 
 beforeEach(() => {
@@ -378,5 +384,50 @@ describe("pane command history", () => {
     pushPaneCommand("s2", "ls");
     clearTabSplit(id);
     expect(get0().splitHistory).toBeUndefined();
+  });
+});
+
+// ── Markdown preview ──────────────────────────────────────────────────────────
+
+describe("preview state", () => {
+  const first = () => get(tabs)[0];
+
+  it("opens, navigates and closes a preview on one tab", () => {
+    const id = addTab("s1", "bash");
+    openPreview(id, "D:\a.md");
+    openPreview(id, "D:\b.md");
+    expect(first().preview?.history).toEqual(["D:\a.md", "D:\b.md"]);
+    previewBack(id);
+    expect(first().preview?.index).toBe(0);
+    previewForward(id);
+    expect(first().preview?.index).toBe(1);
+    setPreviewSize(id, 4096);
+    expect(first().preview?.size).toBe(4096);
+    closePreview(id);
+    expect(first().preview).toBeUndefined();
+  });
+
+  it("leaves other tabs alone", () => {
+    const a = addTab("s1", "a");
+    addTab("s2", "b");
+    openPreview(a, "D:\a.md");
+    expect(get(tabs)[1].preview).toBeUndefined();
+  });
+
+  it("removing the tab removes its preview", () => {
+    const id = addTab("s1", "bash");
+    openPreview(id, "D:\a.md");
+    removeTab(id);
+    expect(get(tabs)).toEqual([]);
+  });
+
+  it("paneContext resolves the primary and the split pane", () => {
+    const id = addTab("s1", "bash", "bash", "git-bash");
+    setPaneCwd("s1", "/d/api");
+    setTabSplit(id, "s2", "horizontal", "wsl");
+    setPaneCwd("s2", "/home/me");
+    expect(paneContext("s1")).toEqual({ tabId: id, profileId: "git-bash", cwd: "/d/api" });
+    expect(paneContext("s2")).toEqual({ tabId: id, profileId: "wsl", cwd: "/home/me" });
+    expect(paneContext("nope")).toBeNull();
   });
 });
