@@ -4,6 +4,9 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 export default defineConfig({
   plugins: [svelte()],
 
+  // Component tests mount Svelte in jsdom, which needs the browser build of Svelte.
+  resolve: process.env.VITEST ? { conditions: ["browser"] } : undefined,
+
   // Prevent vite from obscuring Rust errors.
   clearScreen: false,
 

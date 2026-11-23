@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { basename, formatSize } from "./format.js";
+import { basename, formatSize, previewLabel } from "./format.js";
 
 describe("formatSize", () => {
   it("uses bytes, KB and MB", () => {
@@ -17,5 +17,13 @@ describe("basename", () => {
     expect(basename("D:/code/api/README.md")).toBe("README.md");
     expect(basename("\\\\wsl.localhost\\Ubuntu\\home\\u\\a.md")).toBe("a.md");
     expect(basename("a.md")).toBe("a.md");
+  });
+});
+
+describe("previewLabel", () => {
+  it("names the file and, once known, its size", () => {
+    expect(previewLabel(undefined)).toBe("");
+    expect(previewLabel({ history: ["D:/code/README.md"], index: 0 })).toBe("README.md");
+    expect(previewLabel({ history: ["D:/code/README.md"], index: 0, size: 4096 })).toBe("README.md · 4 KB");
   });
 });

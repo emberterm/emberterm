@@ -25,10 +25,11 @@
   import { createAutosave } from "./session/autosave.js";
   import { pickProfile } from "./session/profiles.js";
   import { duplicateIndex } from "./session/duplicateTab.js";
+  import { previewLabel } from "./preview/format.js";
   import { toSnapshot, clampActiveTab, type SavedSession, type SavedTab } from "./stores/sessionSnapshot.js";
   import { onProfilesUpdated, onConfigUpdated, onAppWarning } from "./ipc/events.js";
   import {
-    tabs, activeCwd, activeShell,
+    tabs, activeTab, activeCwd, activeShell,
     addTab, removeTab, activateTab, moveTab, setPaneCwd, setTabTitle,
     pushPaneCommand, restoreTabHistory,
     setTabSplit, clearTabSplit, pushToast, restoreCustomTitle,
@@ -288,7 +289,7 @@
       {/each}
     {/if}
   </main>
-  <StatusBar shell={$activeShell} cwd={$activeCwd} gitBranch={$gitInfo.branch} gitDirty={$gitInfo.dirty} gitInsertions={$gitInfo.insertions} gitDeletions={$gitInfo.deletions} {termCols} {termRows} onOpenPalette={() => (paletteOpen = true)} />
+  <StatusBar shell={$activeShell} cwd={$activeCwd} gitBranch={$gitInfo.branch} gitDirty={$gitInfo.dirty} gitInsertions={$gitInfo.insertions} gitDeletions={$gitInfo.deletions} {termCols} {termRows} previewLabel={previewLabel($activeTab?.preview)} onOpenPalette={() => (paletteOpen = true)} />
 </div>
 
 <!-- Modals outside .app — unaffected by window opacity -->

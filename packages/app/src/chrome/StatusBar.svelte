@@ -9,10 +9,12 @@
     gitDeletions?: number;
     termCols?: number;
     termRows?: number;
+    /** The open Markdown preview, e.g. "README.md · 4 KB"; empty when there is none. */
+    previewLabel?: string;
     onOpenPalette?: () => void;
   }
 
-  let { shell = "", cwd = "", gitBranch = "", gitDirty = false, gitInsertions = 0, gitDeletions = 0, termCols = 0, termRows = 0, onOpenPalette }: Props = $props();
+  let { shell = "", cwd = "", gitBranch = "", gitDirty = false, gitInsertions = 0, gitDeletions = 0, termCols = 0, termRows = 0, previewLabel = "", onOpenPalette }: Props = $props();
 
   function shortenCwd(path: string): string {
     if (!path) return "~";
@@ -104,7 +106,10 @@
 
   <span class="status-spacer"></span>
 
-  <!-- Right items: size · encoding · hint · clock -->
+  <!-- Right items: preview · size · encoding · hint · clock -->
+  {#if previewLabel}
+    <span class="status-item status-preview">Preview: {previewLabel}</span>
+  {/if}
   {#if hasSize}
     <span class="status-item status-size">{termCols}×{termRows}</span>
   {/if}
