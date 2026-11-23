@@ -13,6 +13,11 @@ describe("shortcutFor", () => {
     expect(shortcutFor(ev({ ctrlKey: true, key: ",", code: "Comma" }))).toBe("settings");
   });
 
+  it("Ctrl+Shift+M toggles the Markdown preview", () => {
+    expect(shortcutFor(ev({ ctrlKey: true, shiftKey: true, key: "M", code: "KeyM" }))).toBe("previewFile");
+    expect(SHORTCUTS.find((s) => s.action === "previewFile")?.keys).toBe("Ctrl+Shift+M");
+  });
+
   it("uses Cmd the same way as Ctrl", () => {
     expect(shortcutFor(ev({ metaKey: true, shiftKey: true, key: "T", code: "KeyT" }))).toBe("newTab");
   });

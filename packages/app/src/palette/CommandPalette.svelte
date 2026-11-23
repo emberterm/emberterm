@@ -8,12 +8,13 @@
     onNewTab?: (profileId?: string) => void;
     onSplit?: (direction: "horizontal" | "vertical", profileId?: string) => void;
     onOpenSettings?: () => void;
+    onPreviewFile?: () => void;
     profiles?: Profile[];
     defaultProfileId?: string;
   }
 
   let {
-    open, onClose, onNewTab, onSplit, onOpenSettings,
+    open, onClose, onNewTab, onSplit, onOpenSettings, onPreviewFile,
     profiles = [], defaultProfileId = "",
   }: Props = $props();
 
@@ -51,6 +52,14 @@
         kind: "command",
         shortcut: "Ctrl+Shift+T",
         action: () => { onNewTab?.(); onClose(); },
+      },
+      {
+        id: "preview.file",
+        label: "Preview Markdown file…",
+        section: "Commands",
+        kind: "command",
+        shortcut: "Ctrl+Shift+M",
+        action: () => { onPreviewFile?.(); onClose(); },
       },
       {
         id: "settings.open",

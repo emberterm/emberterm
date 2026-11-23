@@ -26,6 +26,7 @@
   import { pickProfile } from "./session/profiles.js";
   import { duplicateIndex } from "./session/duplicateTab.js";
   import { previewLabel } from "./preview/format.js";
+  import { togglePreview } from "./session/previewActions.js";
   import { toSnapshot, clampActiveTab, type SavedSession, type SavedTab } from "./stores/sessionSnapshot.js";
   import { onProfilesUpdated, onConfigUpdated, onAppWarning } from "./ipc/events.js";
   import {
@@ -136,6 +137,7 @@
       case "moveTabRight": shiftActiveTab(1); break;
       case "splitHorizontal": splitActiveTab("horizontal"); break;
       case "splitVertical": splitActiveTab("vertical"); break;
+      case "previewFile": togglePreview(); break;
     }
   }
 
@@ -293,7 +295,7 @@
 </div>
 
 <!-- Modals outside .app — unaffected by window opacity -->
-<CommandPalette open={paletteOpen} profiles={profileCache} {defaultProfileId} onClose={() => (paletteOpen = false)} onNewTab={openNewTab} onSplit={splitActiveTab} onOpenSettings={() => (settingsOpen = true)} />
+<CommandPalette open={paletteOpen} profiles={profileCache} {defaultProfileId} onClose={() => (paletteOpen = false)} onNewTab={openNewTab} onSplit={splitActiveTab} onOpenSettings={() => (settingsOpen = true)} onPreviewFile={togglePreview} />
 <SettingsPanel open={settingsOpen} onClose={() => (settingsOpen = false)} onTestProfile={(id) => openNewTab(id)} />
 {#if showWelcome}
   <WelcomeScreen onComplete={async (profileId) => { showWelcome = false; if ($tabs.length === 0) await openNewTab(profileId); }} />

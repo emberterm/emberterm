@@ -1,6 +1,7 @@
 <script lang="ts">
   import Grid from "./Grid.svelte";
   import { SplitContainer } from "@emberterm/ui";
+  import { previewFromTerminal } from "../session/previewActions.js";
   import type { Tab } from "../stores/app.js";
 
   interface Props {
@@ -30,16 +31,19 @@
       <SplitContainer direction={tab.splitDirection ?? "horizontal"} bind:ratio={splitRatio} onClose={onCloseSplit}>
         {#snippet primary()}
           <Grid sessionId={tab.sessionId} active={isActive} {onExit} {onResize}
-                onCwd={(c) => onPaneCwd(tab.sessionId, c)} onCommand={(c) => onPaneCommand(tab.sessionId, c)} onTitle={(t) => onPaneTitle(tab.sessionId, t)} />
+                onCwd={(c) => onPaneCwd(tab.sessionId, c)} onCommand={(c) => onPaneCommand(tab.sessionId, c)} onTitle={(t) => onPaneTitle(tab.sessionId, t)}
+                onPreview={(raw) => previewFromTerminal(tab.sessionId, raw)} />
         {/snippet}
         {#snippet secondary()}
           <Grid sessionId={tab.splitSessionId!} active={isActive} onExit={onSplitExit}
-                onCwd={(c) => onPaneCwd(tab.splitSessionId!, c)} onCommand={(c) => onPaneCommand(tab.splitSessionId!, c)} onTitle={(t) => onPaneTitle(tab.splitSessionId!, t)} />
+                onCwd={(c) => onPaneCwd(tab.splitSessionId!, c)} onCommand={(c) => onPaneCommand(tab.splitSessionId!, c)} onTitle={(t) => onPaneTitle(tab.splitSessionId!, t)}
+                onPreview={(raw) => previewFromTerminal(tab.splitSessionId!, raw)} />
         {/snippet}
       </SplitContainer>
     {:else}
       <Grid sessionId={tab.sessionId} active={isActive} {onExit} {onResize}
-            onCwd={(c) => onPaneCwd(tab.sessionId, c)} onCommand={(c) => onPaneCommand(tab.sessionId, c)} onTitle={(t) => onPaneTitle(tab.sessionId, t)} />
+            onCwd={(c) => onPaneCwd(tab.sessionId, c)} onCommand={(c) => onPaneCommand(tab.sessionId, c)} onTitle={(t) => onPaneTitle(tab.sessionId, t)}
+            onPreview={(raw) => previewFromTerminal(tab.sessionId, raw)} />
     {/if}
   </div>
   {#if tab.preview}
