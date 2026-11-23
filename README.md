@@ -69,9 +69,8 @@ inside the app.
 ## Code signing
 
 Windows installers are not code-signed, so SmartScreen may warn on first run. macOS builds are ad-hoc signed
-and not notarized, because notarization needs a paid Apple Developer Program membership. Both are free-only
-for now: SignPath Foundation's free signing for open source declined the project because it needs more public
-visibility first, and it may be retried later. See [#62](https://github.com/emberterm/emberterm/issues/62).
+and not notarized, because notarization needs a paid Apple Developer Program membership. See
+[#62](https://github.com/emberterm/emberterm/issues/62) for the signing plan.
 
 Updates are checked against the project's own signing key (the public key is in `tauri.conf.json`), whatever
 the operating system says about the installer.
