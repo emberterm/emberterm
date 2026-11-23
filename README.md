@@ -60,7 +60,11 @@ inside the app.
 
 - **Windows:** run the `-setup.exe` (or the `.msi`). If SmartScreen warns, choose *More info* → *Run anyway*.
 - **macOS:** open the `.dmg` and drag EmberTerm to Applications. It is one app for Apple silicon and
-  Intel. If macOS blocks the first launch, allow it in System Settings → Privacy & Security.
+  Intel. The app is not notarized, so macOS blocks the first launch (once). Try to open it, then go to
+  **System Settings → Privacy & Security**, scroll to *Security*, click **Open Anyway** next to the
+  EmberTerm message, and confirm with your password or Touch ID. On macOS 15 and later, right-click →
+  Open no longer gets past it. From a terminal, `xattr -dr com.apple.quarantine /Applications/EmberTerm.app`
+  clears the block too.
 
 ## Code signing policy
 
