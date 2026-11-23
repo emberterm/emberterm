@@ -4,6 +4,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- **Markdown preview:** Ctrl+click a `.md` file name in the output, use "Preview Markdown file" in the command palette, or press Ctrl+Shift+M to read the file rendered next to the terminal, with tables, task lists, highlighted code and local images. It reloads when the file changes. A setting, off by default, opens it after `cat README.md`.
+
 ## [1.2.0] - 2026-11-17
 
 ### Highlights

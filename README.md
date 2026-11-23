@@ -20,6 +20,7 @@ session back when you reopen it. No account, no telemetry.
 - **Session restore:** closing and reopening brings back every tab, split, title and folder
 - **Shells per tab:** pick Git Bash, WSL, PowerShell or cmd from the arrow beside `+`, or set a default profile
 - **Splits:** side by side or stacked, any shell in each pane
+- **Markdown preview:** Ctrl+click a `.md` name in the output, or press Ctrl+Shift+M, to read the file rendered beside the terminal; it reloads when the file changes
 - **Copy, paste, find:** Ctrl+C (with a selection) / Ctrl+Shift+C, Ctrl+V, a right-click menu, and Ctrl+Shift+F to search the scrollback
 - **Tab status:** a dot marks a tab that is running a command or has new output; closing a tab with a program running asks first
 - **Themes:** 7 built-in, or paste any VS Code theme JSON; the choice is remembered

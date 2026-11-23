@@ -6,7 +6,7 @@ EmberTerm is a lightweight Windows terminal for daily use: Tauri 2 (Rust) + Svel
 
 **Stack:**
 - Rust `1.85`: `tauri 2`, `portable-pty 0.9`, `serde`, `anyhow`/`thiserror`, `notify`, `tracing`, `sysinfo`, `fontdb`; Tauri plugins: opener, clipboard-manager (read), window-state, updater (no `zip` feature, see Cargo.toml), process
-- Frontend: Svelte 5 (runes), TypeScript, Vite 6, xterm.js 5 (fit, web-links, search addons)
+- Frontend: Svelte 5 (runes), TypeScript, Vite 6, xterm.js 5 (fit, web-links, search addons); Markdown preview: marked, dompurify, highlight.js (all loaded on first use)
 - IPC: Tauri commands (frontend → Rust), a Tauri Channel for PTY output (raw bytes), and Tauri events (Rust → frontend)
 
 ---
@@ -38,6 +38,8 @@ packages/desktop/src/
   config.rs              ← Config TOML + loading; save_to refuses to overwrite a broken file
   session_store.rs       ← session.json (tabs, splits, folders) load/save
   watcher.rs             ← notify watcher: config.toml / profiles hot-reload, app:warning
+  preview.rs             ← Markdown preview commands: file_preview (1 MB), file_preview_image (5 MB), file_preview_stat, preview_resolve; PreviewError
+  preview_path.rs        ← shell path → Windows path (Git Bash /d/x, WSL /mnt and \wsl.localhost, pwsh); refuses network paths
   terminal/
     pty.rs               ← spawn_session(): reader thread, DEC 2026 coalescing, Channel send, exit wait thread
     session.rs           ← Session struct (PTY master, writer, pid)
@@ -61,12 +63,14 @@ packages/app/src/
     spawnPane.ts         ← starts a PTY session, wires output + background-tab indicators
     confirmClose.ts      ← whether closing a tab needs a confirmation
     closeWindow.ts       ← quit after the last tab closes
+    previewActions.ts    ← open the preview: from a path in the output, the file dialog, the palette/shortcut, or a cat command (opt-in)
   terminal/
     Grid.svelte          ← xterm.js Terminal per session; OSC 7/133/52, title, bell, find, context menu
     TabPane.svelte       ← one tab: one Grid or a split of two
     FindBar.svelte, TermMenu.svelte   ← scrollback search, right-click menu
     termKeys.ts          ← copy / paste / find key chords
     outputSink.ts        ← per-session byte sink (buffers until Grid attaches)
+    previewLinks.ts      ← xterm link provider: Ctrl+click on a .md name in the output
   utils/
     osc.ts               ← parseOsc7, parseOsc52, parseOsc133
     shortcuts.ts         ← window-level shortcuts: single source for the key handler and Keymap page
@@ -77,6 +81,8 @@ packages/app/src/
   palette/CommandPalette.svelte ← Ctrl+Shift+P: tabs, profiles, splits, themes
   settings/              ← SettingsPanel, Appearance/Terminal/Keymap/About, ThemeEditor, ProfileEditor
   welcome/WelcomeScreen.svelte  ← first-launch onboarding
+  preview/               ← Markdown preview panel (lazy chunk): PreviewColumn/Panel/Body/Divider.svelte; markdown.ts (marked + DOMPurify → sanitized fragment),
+                           links.ts, images.ts, slug.ts, highlight.ts (highlight.js subset), poller.ts (live reload), catCommand.ts, previewState.ts, layout.ts, format.ts, errors.ts
   theme/                 ← tokens.ts, vscode-import.ts, store.ts, font/padding/theme config, themes/ (7 built-in)
 
 packages/ui/src/lib/     ← Btn, Badge, Kbd, SplitContainer (barrel: index.ts)
@@ -206,6 +212,8 @@ Closing a tab asks first when `paneBusy` says a command is running; shells witho
 | `gitStatus(cwd)` | `Promise<GitStatus>` | branch, dirty, insertions, deletions |
 | `detectBuiltinProfiles()` | `Promise<BuiltinProfileSpec[]>` | |
 | `fontList()` | `Promise<{ name, monospaced }[]>` | installed font families, cached per run |
+| `filePreview(path)` / `filePreviewImage(path)` / `filePreviewStat(path)` | `FilePreview` / `Uint8Array` / `number` (mtime ms) | Markdown preview; rejects with `PreviewError { code }` |
+| `previewResolve({ profileId?, cwd, raw })` | `Promise<string>` | a path from a pane → Windows path, by that pane's shell and folder |
 
 Plugins are called through their own JS packages (not `ipc/client.ts`): clipboard read for paste, updater and process for About → Check for updates, opener for external links. Each needs a permission in `capabilities/default.json`.
 
@@ -232,6 +240,8 @@ Folder, busy state, title, bell and clipboard come from xterm.js handlers (`util
 - A user-editable file that fails to parse is moved aside (`*.broken-<ts>`) at startup and reported as a toast; while the app runs it is left alone and saves are refused
 - Svelte reactivity trap: props that resolve through the `$tabs` store re-run any effect that reads them; read them with `untrack` or through a `$derived`
 - xterm swallows Tab and Ctrl+V; terminal-scoped keys are handled in `Grid.svelte`'s custom key handler, window-level ones in `utils/shortcuts.ts`
+- The Markdown preview is a column next to a stable `.terminals` wrapper in `TabPane.svelte`: the terminals must never remount (they would lose their scrollback) when it opens or closes. Its state (`Tab.preview`) is not saved in `session.json`
+- Markdown from a file is untrusted: it only becomes DOM through `renderMarkdown` (DOMPurify, returns a fragment, no `{@html}`), remote images are replaced by a note, and the CSP is unchanged. Terminal output can forge paths and folders, so `preview.rs` and `preview_path.rs` never read a network path (SMB auth leaks the NTLM hash) except `\wsl.localhost\`
 - Git Bash orphans child processes (MSYS), so the process tree cannot show a running command there; that is why bash/WSL announce it with OSC 133
 
 ---
