@@ -25,6 +25,7 @@ let component: ReturnType<typeof mount> | undefined;
 const onCheck = vi.fn();
 const onInstall = vi.fn();
 const onDismiss = vi.fn();
+const scrollIntoView = vi.fn();
 
 function show(state: UpdateState) {
   component = mount(UpdateView, { target: host, props: { state, onCheck, onInstall, onDismiss } });
@@ -35,7 +36,9 @@ const button = (label: string) => [...host.querySelectorAll("button")].find((b) 
 beforeEach(() => {
   host = document.createElement("div");
   document.body.appendChild(host);
-  for (const f of [onCheck, onInstall, onDismiss, vi.mocked(openUrl)]) f.mockClear();
+  for (const f of [onCheck, onInstall, onDismiss, scrollIntoView, vi.mocked(openUrl)]) f.mockClear();
+  // jsdom has no scrollIntoView
+  Element.prototype.scrollIntoView = scrollIntoView;
 });
 
 afterEach(() => {
@@ -174,6 +177,23 @@ describe("UpdateView: installing", () => {
   });
 });
 
+describe("UpdateView: where the card sits", () => {
+  it("brings the card into view when an update appears, so Install is not left below the fold", async () => {
+    show(available());
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+  });
+
+  it("keeps the warning and the buttons together in one footer that can stay on screen", () => {
+    show(available());
+    const footer = host.querySelector(".footer")!;
+    expect(footer.querySelector('[role="note"]')).not.toBeNull();
+    expect([...footer.querySelectorAll("button")].map((b) => b.textContent?.trim())).toEqual([
+      "Install 2.0.0 and restart", "Not now",
+    ]);
+  });
+});
+
 describe("UpdateView: errors", () => {
   it("announces a failed install, says nothing changed, and retries the install", () => {
     show({ kind: "error", step: "install", message: "connection lost", currentVersion: "1.2.0" });
@@ -186,6 +206,17 @@ describe("UpdateView: errors", () => {
     expect(onCheck).not.toHaveBeenCalled();
     button("Dismiss")!.click();
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts a full stop after a message that has none, and not a second one after a message that has", () => {
+    show({ kind: "error", step: "install", message: "Invalid encoding in minisign data", currentVersion: "1.2.0" });
+    const alert = () => host.querySelector('[role="alert"]')!.textContent!.replace(/\s+/g, " ");
+    expect(alert()).toContain("Invalid encoding in minisign data. Nothing was changed");
+    unmount(component!);
+    host.replaceChildren();
+    show({ kind: "error", step: "install", message: "The download failed.", currentVersion: "1.2.0" });
+    expect(alert()).toContain("The download failed. Nothing was changed");
+    expect(alert()).not.toContain("..");
   });
 
   it("retries the check after a failed check", () => {

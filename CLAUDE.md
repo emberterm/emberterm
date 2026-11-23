@@ -39,6 +39,7 @@ packages/desktop/src/
   config.rs              ← Config TOML + loading; save_to refuses to overwrite a broken file
   session_store.rs       ← session.json (tabs, splits, folders, per-pane command history) load/save
   watcher.rs             ← notify watcher: config.toml / profiles hot-reload, app:warning
+  releases.rs            ← releases_fetch: stable GitHub releases (newest first, max 30) for the update card's in-between notes; parse_releases is pure
   preview.rs             ← Markdown preview commands: file_preview (1 MB), file_preview_image (5 MB), file_preview_stat, preview_resolve; PreviewError
   preview_path.rs        ← shell path → Windows path (Git Bash /d/x, WSL /mnt and \\wsl.localhost, pwsh); on macOS and Linux paths stay POSIX (`Host`); refuses network paths
   terminal/
@@ -57,6 +58,7 @@ packages/app/src/
   ipc/client.ts, events.ts   ← typed invoke() / listen() wrappers
   stores/
     app.ts               ← tabs, activeCwd, toasts, split/rename updaters
+    update.ts            ← the one updater instance (state outlives the Settings panel, so a download survives closing it)
     sessionSnapshot.ts   ← tabs → SavedSession (session.json shape)
     terminalConfigStore.ts, gitStatus.ts
     paneBusy.ts          ← per-pane "command running" from OSC 133, not reactive
@@ -68,6 +70,7 @@ packages/app/src/
     closeWindow.ts       ← quit after the last tab closes
     duplicateTab.ts      ← where a duplicated tab goes (right after its source)
     nonces.ts            ← per-session secret that authenticates OSC 133;E command marks
+    busyTabs.ts          ← how many tabs have a program running (the update card's restart warning)
     previewActions.ts    ← open the preview: from a path in the output, the file dialog, the palette/shortcut, or a cat command (opt-in)
   terminal/
     Grid.svelte          ← xterm.js Terminal per session; OSC 7/133/52, title, bell, find, context menu
@@ -84,13 +87,15 @@ packages/app/src/
     tabLabel.ts, fontFamily.ts, clock.ts, bell.ts, warnings.ts
     history.ts           ← which commands are kept for restore (10 per pane, no leading space, no secret-looking text)
     menuPosition.ts, portal.ts   ← context menus stay on screen and paint above the status bar
-    updater.ts           ← check → download → install → relaunch state machine
+    updater.ts           ← createUpdater(deps): check → available card → install (download, install, relaunch) only on the second click; late answers ignored
+    releaseNotes.ts      ← versions between yours and the new one, notes trimmed to Highlights/Changes/Fixes, dates
   chrome/
     TitleBar.svelte, TabStrip.svelte, ProfileMenu.svelte, StatusBar.svelte, Toasts.svelte, ConfirmDialog.svelte
     TabMenu.svelte       ← tab right-click menu: duplicate, move, close (rename is a double-click on the title)
     tabDrop.ts           ← drag-to-reorder: which half of a tab the pointer is over decides before/after
   palette/CommandPalette.svelte ← Ctrl+Shift+P: tabs, profiles, splits, themes, Preview Markdown file
-  settings/              ← SettingsPanel, Appearance/Terminal/Keymap/About, ThemeEditor, ProfileEditor, NumberStepper
+  settings/              ← SettingsPanel, Appearance/Terminal/Keymap/About, ThemeEditor, ProfileEditor, NumberStepper;
+                           UpdateView (the update card, props only), ReleaseNotes (accordion), NotesMarkdown (sanitized, http(s) links only)
   welcome/WelcomeScreen.svelte  ← first-launch onboarding
   preview/               ← Markdown preview panel (lazy chunk): PreviewColumn/Panel/Body/Divider.svelte; markdown.ts (marked + DOMPurify → sanitized fragment),
                            links.ts, images.ts, slug.ts, highlight.ts (highlight.js subset), poller.ts (live reload), catCommand.ts, previewState.ts, layout.ts, format.ts, errors.ts
@@ -228,6 +233,7 @@ Closing a tab asks first when `paneBusy` says a command is running; shells witho
 | `fontList()` | `Promise<{ name, monospaced }[]>` | installed font families, cached per run |
 | `filePreview(path)` / `filePreviewImage(path)` / `filePreviewStat(path)` | `FilePreview` / `Uint8Array` / `number` (mtime ms) | Markdown preview; rejects with `PreviewError { code }` |
 | `previewResolve({ profileId?, cwd, raw })` | `Promise<string>` | a path from a pane → Windows path, by that pane's shell and folder |
+| `releasesFetch()` | `Promise<ReleaseNote[]>` | stable releases from GitHub, newest first; rejects with `{ code: network | rate_limited | status | parse }` |
 
 Plugins are called through their own JS packages (not `ipc/client.ts`): clipboard read for paste, updater and process for About → Check for updates, opener for external links, dialog for the file pickers (a profile's folder, Preview Markdown file). Each needs a permission in `capabilities/default.json`.
 
@@ -256,6 +262,7 @@ Folder, busy state, title, bell and clipboard come from xterm.js handlers (`util
 - xterm swallows Tab and Ctrl+V; terminal-scoped keys are handled in `Grid.svelte`'s custom key handler, window-level ones in `utils/shortcuts.ts`
 - The Markdown preview is a column next to a stable `.terminals` wrapper in `TabPane.svelte`: the terminals must never remount (they would lose their scrollback) when it opens or closes. Its state (`Tab.preview`) is not saved in `session.json`
 - Markdown from a file is untrusted: it only becomes DOM through `renderMarkdown` (DOMPurify, returns a fragment, no `{@html}`), remote images are replaced by a note, and the CSP is unchanged. Terminal output can forge paths and folders, so `preview.rs` and `preview_path.rs` never read a network path (SMB auth leaks the NTLM hash) except `\\wsl.localhost\`
+- An update never installs or restarts without the user's second click (Install on the card): `createUpdater.check()` stops at `available`, and only `install()` downloads. The in-between notes come from `releases_fetch` after the card shows, and a failure there must never block installing
 - Tab panes hide with `visibility: hidden`, never `display: none`: xterm's ResizeObserver would measure 0-width cells and corrupt full-screen programs. WebGL is attached only to the tab that is shown
 - Command history rides on the hook's `OSC 133;E` mark (percent-encoded, with the session nonce, so a mark a program printed itself is ignored). `utils/history.ts` drops commands that start with a space, span lines, or look like secrets
 - `session.json` and `config.toml` grow additively with `#[serde(default)]`, so `version` stays 1 and old files still load

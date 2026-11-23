@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { Btn } from "@emberterm/ui";
   import ReleaseNotes from "./ReleaseNotes.svelte";
@@ -31,6 +32,15 @@
     return parts.join(" · ");
   });
 
+  let cardEl = $state<HTMLDivElement | undefined>();
+  const kind = $derived(update.kind);
+  // The About page has its header above the card, so without this Install can sit below the fold.
+  $effect(() => {
+    if (kind === "available" && cardEl) untrack(() => cardEl?.scrollIntoView({ block: "nearest" }));
+  });
+
+  // An error message may end without a full stop, and a sentence follows it.
+  const stop = (m: string): string => (/[.!?…]\s*$/.test(m) ? "" : ".");
   const plural = (n: number) => `${n} tab${n === 1 ? "" : "s"}`;
   const idleStatus = $derived(
     update.kind === "checking" ? "Checking for updates…" : update.kind === "current" ? "You're on the latest version." : "",
@@ -47,7 +57,7 @@
 {/snippet}
 
 {#if update.kind === "available"}
-  <div class="card">
+  <div class="card" bind:this={cardEl}>
     <div class="title">EmberTerm {update.version} is available</div>
     <div class="meta">{meta}</div>
     <div class="label">What's new since {update.currentVersion}</div>
@@ -62,6 +72,7 @@
         <span>Could not load notes for the releases in between (offline, or GitHub is limiting requests). Showing the newest release only. {@render extlink(RELEASES, "View all releases")}</span>
       </div>
     {/if}
+    <div class="footer">
     <div class="notice warn" role="note">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 3 2 20h20L12 3ZM12 10v5M12 17.5h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -78,6 +89,7 @@
       <Btn variant="primary" onclick={onInstall}>Install {update.version} and restart</Btn>
       <Btn onclick={onDismiss}>Not now</Btn>
       <span class="spacer">{@render extlink(update.compareUrl ?? RELEASES, "Full changelog on GitHub")}</span>
+    </div>
     </div>
   </div>
 {:else if update.kind === "downloading" || update.kind === "installing"}
@@ -110,7 +122,7 @@
         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" /><path d="m9 9 6 6M15 9l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
       </svg>
       <span>
-        <b>Update failed.</b> {update.message}
+        <b>Update failed.</b> {update.message}{stop(update.message)}
         {#if update.step === "install"}Nothing was changed, and you are still on {update.currentVersion}.{/if}
       </span>
     </div>
@@ -140,6 +152,11 @@
   .info svg { color: var(--blue); }
   .err { border-color: var(--red); }
   .err svg { color: var(--red); }
+
+  /* Stays at the bottom of the visible area while the notes scroll, so Install is never off screen.
+     The -20px is the bottom padding of the Settings content area (SettingsPanel.svelte): sticky
+     respects it, and without the offset list rows show through below the footer. */
+  .footer { position: sticky; bottom: -20px; display: flex; flex-direction: column; gap: 10px; margin: 0 -16px -14px; padding: 10px 16px 14px; background: var(--bg-elev); border-top: 1px solid var(--border); border-radius: 0 0 8px 8px; }
 
   .actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .spacer { margin-left: auto; }

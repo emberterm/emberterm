@@ -41,7 +41,7 @@
 </div>
 
 <style>
-  .releases { max-height: 260px; overflow: auto; border-bottom: 1px solid var(--border); }
+  .releases { border-bottom: 1px solid var(--border); }
   .release { border-top: 1px solid var(--border); }
 
   .head {

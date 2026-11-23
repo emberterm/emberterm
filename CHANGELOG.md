@@ -7,6 +7,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 ### Added
 
 - **Markdown preview:** Ctrl+click a `.md` file name in the output, use "Preview Markdown file" in the command palette, or press Ctrl+Shift+M to read the file rendered next to the terminal, with tables, task lists, highlighted code and local images. It reloads when the file changes. A setting, off by default, opens it after `cat README.md`.
+- **Updates wait for you:** Check for updates now shows what changed in every release since yours and installs only when you click Install. The card warns how many tabs have a program running, since installing restarts EmberTerm, and it falls back to the newest release's notes when GitHub cannot be reached.
 
 ## [1.2.0] - 2026-11-17
 
