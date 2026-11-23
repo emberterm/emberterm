@@ -132,3 +132,43 @@ export async function startupWarnings(): Promise<StartupWarning[]> {
 export async function configIsFirstRun(): Promise<boolean> {
   return invoke<boolean>("config_is_first_run");
 }
+
+// ── Markdown preview commands ─────────────────────────────────────────────────
+
+export interface FilePreview {
+  path: string;
+  text: string;
+  size: number;
+  mtime_ms: number;
+}
+
+export type PreviewErrorCode =
+  | "not_found" | "too_large" | "not_markdown" | "not_an_image" | "not_a_file" | "unresolvable" | "io";
+
+/** What a failed preview command rejects with (mirrors `PreviewError` in preview.rs). */
+export interface PreviewError {
+  code: PreviewErrorCode;
+  limit?: number;
+  reason?: string;
+  message?: string;
+}
+
+/** Reads a Markdown file (at most 1 MB) for the preview panel. */
+export async function filePreview(path: string): Promise<FilePreview> {
+  return invoke("file_preview", { path });
+}
+
+/** Raw bytes of a local image (at most 5 MB) referenced by a document. */
+export async function filePreviewImage(path: string): Promise<Uint8Array> {
+  return new Uint8Array(await invoke<ArrayBuffer>("file_preview_image", { path }));
+}
+
+/** Last-modified time in ms, for live reload. */
+export async function filePreviewStat(path: string): Promise<number> {
+  return invoke("file_preview_stat", { path });
+}
+
+/** Turns a path typed or printed in a pane into a Windows path, using that pane's shell and folder. */
+export async function previewResolve(opts: { profileId?: string; cwd: string; raw: string }): Promise<string> {
+  return invoke("preview_resolve", { profileId: opts.profileId ?? null, cwd: opts.cwd, raw: opts.raw });
+}

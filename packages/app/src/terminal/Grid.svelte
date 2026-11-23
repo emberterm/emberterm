@@ -24,6 +24,7 @@
   import { isCopyChord, isPasteChord, isFindChord } from "./termKeys.js";
   import { shortcutFor } from "../utils/shortcuts.js";
   import { playBell } from "../utils/bell.js";
+  import { registerPreviewLinks } from "./previewLinks.js";
 
   // ── Props ────────────────────────────────────────────────────────────────
 
@@ -35,9 +36,10 @@
     onCwd?: (cwd: string) => void;
     onCommand?: (cmd: string) => void;
     onTitle?: (title: string) => void;
+    onPreview?: (rawPath: string) => void;
   }
 
-  let { sessionId, active, onExit, onResize, onCwd, onCommand, onTitle }: Props = $props();
+  let { sessionId, active, onExit, onResize, onCwd, onCommand, onTitle, onPreview }: Props = $props();
 
   // ── Terminal instance ────────────────────────────────────────────────────
 
@@ -89,6 +91,7 @@
       searchAddon = search;
 
       t.open(container);
+      registerPreviewLinks(t, (raw) => onPreview?.(raw));
       t.parser.registerOscHandler(7, (data) => {
         const cwd = parseOsc7(data);
         if (cwd) onCwd?.(cwd);

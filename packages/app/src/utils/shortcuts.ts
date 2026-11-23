@@ -9,7 +9,8 @@ export type ShortcutAction =
   | "palette"
   | "settings"
   | "splitHorizontal"
-  | "splitVertical";
+  | "splitVertical"
+  | "previewFile";
 
 export interface KeyInfo {
   key: string;
@@ -39,6 +40,7 @@ export const SHORTCUTS: Shortcut[] = [
   { action: "moveTabRight", label: "Move tab right", keys: "Ctrl+Shift+PageDown", matches: (e, m) => m && e.shiftKey && e.key === "PageDown" },
   { action: "splitHorizontal", label: "Split pane (side by side)", keys: "Ctrl+Shift+\\", matches: (e, m) => m && e.shiftKey && e.code === "Backslash" },
   { action: "splitVertical", label: "Split pane (stacked)", keys: "Ctrl+Shift+-", matches: (e, m) => m && e.shiftKey && e.code === "Minus" },
+  { action: "previewFile", label: "Preview Markdown file", keys: "Ctrl+Shift+M", matches: (e, m) => m && e.shiftKey && e.key.toLowerCase() === "m" },
   { action: "palette", label: "Command palette", keys: "Ctrl+Shift+P", matches: (e, m) => m && e.shiftKey && e.key.toLowerCase() === "p" },
   { action: "settings", label: "Settings", keys: "Ctrl+,", matches: (e, m) => m && !e.shiftKey && e.key === "," },
 ];

@@ -25,12 +25,14 @@
   import { createAutosave } from "./session/autosave.js";
   import { pickProfile } from "./session/profiles.js";
   import { duplicateIndex } from "./session/duplicateTab.js";
+  import { previewLabel } from "./preview/format.js";
+  import { togglePreview, handlePaneCommand } from "./session/previewActions.js";
   import { toSnapshot, clampActiveTab, type SavedSession, type SavedTab } from "./stores/sessionSnapshot.js";
   import { onProfilesUpdated, onConfigUpdated, onAppWarning } from "./ipc/events.js";
   import {
-    tabs, activeCwd, activeShell,
+    tabs, activeTab, activeCwd, activeShell,
     addTab, removeTab, activateTab, moveTab, setPaneCwd, setTabTitle,
-    pushPaneCommand, restoreTabHistory,
+    restoreTabHistory,
     setTabSplit, clearTabSplit, pushToast, restoreCustomTitle,
   } from "./stores/app.js";
 
@@ -135,6 +137,7 @@
       case "moveTabRight": shiftActiveTab(1); break;
       case "splitHorizontal": splitActiveTab("horizontal"); break;
       case "splitVertical": splitActiveTab("vertical"); break;
+      case "previewFile": togglePreview(); break;
     }
   }
 
@@ -282,17 +285,17 @@
           onResize={tab.isActive ? (c, r) => { termCols = c; termRows = r; } : undefined}
           onCloseSplit={() => closeSplitPane(tab.id)}
           onPaneCwd={setPaneCwd}
-          onPaneCommand={pushPaneCommand}
+          onPaneCommand={handlePaneCommand}
           onPaneTitle={handlePaneTitle}
         />
       {/each}
     {/if}
   </main>
-  <StatusBar shell={$activeShell} cwd={$activeCwd} gitBranch={$gitInfo.branch} gitDirty={$gitInfo.dirty} gitInsertions={$gitInfo.insertions} gitDeletions={$gitInfo.deletions} {termCols} {termRows} onOpenPalette={() => (paletteOpen = true)} />
+  <StatusBar shell={$activeShell} cwd={$activeCwd} gitBranch={$gitInfo.branch} gitDirty={$gitInfo.dirty} gitInsertions={$gitInfo.insertions} gitDeletions={$gitInfo.deletions} {termCols} {termRows} previewLabel={previewLabel($activeTab?.preview)} onOpenPalette={() => (paletteOpen = true)} />
 </div>
 
 <!-- Modals outside .app — unaffected by window opacity -->
-<CommandPalette open={paletteOpen} profiles={profileCache} {defaultProfileId} onClose={() => (paletteOpen = false)} onNewTab={openNewTab} onSplit={splitActiveTab} onOpenSettings={() => (settingsOpen = true)} />
+<CommandPalette open={paletteOpen} profiles={profileCache} {defaultProfileId} onClose={() => (paletteOpen = false)} onNewTab={openNewTab} onSplit={splitActiveTab} onOpenSettings={() => (settingsOpen = true)} onPreviewFile={togglePreview} />
 <SettingsPanel open={settingsOpen} onClose={() => (settingsOpen = false)} onTestProfile={(id) => openNewTab(id)} />
 {#if showWelcome}
   <WelcomeScreen onComplete={async (profileId) => { showWelcome = false; if ($tabs.length === 0) await openNewTab(profileId); }} />

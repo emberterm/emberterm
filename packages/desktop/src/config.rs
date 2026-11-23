@@ -40,6 +40,8 @@ pub struct BehaviorConfig {
     /// including a file shown with `cat`, could otherwise swap in a command to be pasted.
     pub osc52_clipboard: bool,
     pub scrollback_lines: usize,
+    /// Open a Markdown file in the preview panel when a command like `cat README.md` has run.
+    pub preview_on_cat: bool,
 }
 
 impl Default for AppearanceConfig {
@@ -66,6 +68,7 @@ impl Default for BehaviorConfig {
             bell_sound: true,
             osc52_clipboard: false,
             scrollback_lines: 10000,
+            preview_on_cat: false,
         }
     }
 }

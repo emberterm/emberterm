@@ -5,6 +5,8 @@ mod fonts;
 mod fsutil;
 mod git;
 mod ipc;
+mod preview;
+mod preview_path;
 mod profile;
 mod session_store;
 mod state;
@@ -61,6 +63,10 @@ fn main() {
             ipc::git_status,
             ipc::config_is_first_run,
             ipc::detect_builtin_profiles,
+            preview::file_preview,
+            preview::file_preview_image,
+            preview::file_preview_stat,
+            preview::preview_resolve,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmberTerm");

@@ -162,3 +162,16 @@ bell_sound = true
         "missing key must default to off"
     );
 }
+
+#[test]
+fn preview_on_cat_is_off_unless_the_file_turns_it_on() {
+    assert!(!Config::default().behavior.preview_on_cat);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    std::fs::write(&path, "[behavior]\nbell_sound = false\n").unwrap();
+    let (cfg, _) = Config::load_from(&path, true);
+    assert!(!cfg.behavior.preview_on_cat);
+    std::fs::write(&path, "[behavior]\npreview_on_cat = true\n").unwrap();
+    let (cfg, _) = Config::load_from(&path, true);
+    assert!(cfg.behavior.preview_on_cat);
+}

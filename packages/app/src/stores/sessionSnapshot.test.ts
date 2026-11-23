@@ -59,3 +59,11 @@ describe("clampActiveTab", () => {
     expect(clampActiveTab(s(1, 2))).toBe(1);
   });
 });
+
+describe("toSnapshot and the preview panel", () => {
+  it("does not save an open preview", () => {
+    const plain = tab({ id: "a", profileId: "pwsh", cwd: "D:/x" });
+    const withPreview = { ...plain, preview: { history: ["D:\a.md"], index: 0, size: 12 } };
+    expect(toSnapshot([withPreview])).toEqual(toSnapshot([plain]));
+  });
+});
