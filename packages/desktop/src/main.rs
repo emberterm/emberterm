@@ -6,6 +6,7 @@ mod fsutil;
 mod git;
 mod ipc;
 mod preview;
+mod preview_find;
 mod preview_path;
 mod profile;
 mod releases;

@@ -6,6 +6,7 @@ use std::time::UNIX_EPOCH;
 use serde::Serialize;
 use tauri::State;
 
+use crate::preview_find::find_below;
 use crate::preview_path::{parse_wsl_list, resolve_preview_path, wsl_distro_from_args, PathError};
 use crate::profile::Profile;
 use crate::state::{lock_or_recover, AppState};
@@ -199,6 +200,21 @@ fn default_wsl_distro() -> Option<String> {
         .clone()
 }
 
+/// A bare name that is not in the pane's folder may have been printed by a command on another
+/// folder (`ls docs/`): take the one match below the pane's folder, else keep the path as resolved.
+fn locate_bare_name(raw: &str, resolved: String) -> String {
+    let path = Path::new(&resolved);
+    let bare = !raw.contains(['/', '\\', '~', ':']);
+    if !bare || path.exists() || ensure_local(path).is_err() {
+        return resolved;
+    }
+    let found = path
+        .parent()
+        .zip(path.file_name())
+        .and_then(|(dir, name)| find_below(dir, name));
+    found.map_or(resolved, |p| p.to_string_lossy().into_owned())
+}
+
 /// Turns a path typed or printed in a pane into a Windows path for the preview commands.
 #[tauri::command]
 #[tracing::instrument(skip_all)]
@@ -216,7 +232,7 @@ pub async fn preview_resolve(
             .then(|| wsl_distro_from_args(&args).or_else(default_wsl_distro))
             .flatten();
         resolve_preview_path(kind, distro.as_deref(), &cwd, &raw)
-            .map(|p| p.to_string_lossy().into_owned())
+            .map(|p| locate_bare_name(&raw, p.to_string_lossy().into_owned()))
             .map_err(PreviewError::from)
     })
     .await
