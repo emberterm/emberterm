@@ -148,3 +148,34 @@ fn errors_serialize_with_a_code() {
     let v = serde_json::to_value(PreviewError::NotFound).unwrap();
     assert_eq!(v, serde_json::json!({ "code": "not_found" }));
 }
+
+#[test]
+fn a_bare_name_missing_from_the_folder_is_found_below_it() {
+    let d = dir();
+    fs::create_dir(d.path().join("docs")).unwrap();
+    let real = d.path().join("docs").join("spec.md");
+    fs::write(&real, b"x").unwrap();
+    let guess = d.path().join("spec.md").to_string_lossy().into_owned();
+    assert_eq!(
+        locate_bare_name("spec.md", guess),
+        real.to_string_lossy().into_owned()
+    );
+}
+
+#[test]
+fn a_path_with_a_folder_is_never_searched_for() {
+    let d = dir();
+    fs::create_dir(d.path().join("docs")).unwrap();
+    fs::write(d.path().join("docs").join("spec.md"), b"x").unwrap();
+    let guess = d.path().join("spec.md").to_string_lossy().into_owned();
+    assert_eq!(locate_bare_name("./spec.md", guess.clone()), guess);
+}
+
+#[test]
+fn a_bare_name_that_exists_stays_put() {
+    let d = dir();
+    let here = write(&d, "spec.md", b"x").to_string_lossy().into_owned();
+    fs::create_dir(d.path().join("docs")).unwrap();
+    fs::write(d.path().join("docs").join("spec.md"), b"y").unwrap();
+    assert_eq!(locate_bare_name("spec.md", here.clone()), here);
+}
