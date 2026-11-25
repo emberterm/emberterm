@@ -4,6 +4,12 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-25
+
+### Highlights
+
+- **Markdown preview:** Ctrl+click on a file name printed by `ls docs/` now opens the file instead of "file not found".
+
 ### Fixed
 
 - **Markdown preview:** Ctrl+click on a file name printed by `ls docs/` (a name that is not in the pane's folder) now opens the file when it is the only match in a subfolder, instead of "file not found".
